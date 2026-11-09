@@ -1,0 +1,13 @@
+node_modules/
+.env*
+!.env.example
+# 秘匿値のファイル（secrets.env や cookies*.json など）を誤ってコミットしないため。
+*.env
+cookies*.json
+.DS_Store
+dist/
+
+# Claude Code の手元だけの設定（許可の設定などを含むため、共有しない）。
+.claude/settings.local.json
+# ブラウザ操作の道具が作業場所に書く出力（共有しない）。
+.playwright-mcp/

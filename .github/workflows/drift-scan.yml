@@ -1,0 +1,64 @@
+# 定期の走査。結果は成果物に残すだけで、通知しない（所見があってもジョブは成功で終える）。
+# 間隔の日数: 7
+# 成果物の名前の接頭辞: drift-scan-
+# 走査の本体は scripts/harness/drift-scan.sh（このファイルは呼ぶだけ）。上の 2 行の注釈は、走査と文書の点検の取得の手順が
+# 機械的に読むので、形を変えない。間隔の日数は cron と合わせる（走査が照らし合わせ、合わなければ失敗にする）。
+# アクションはコミットの SHA で固定し、版の名前をコメントに残す。
+# このひな形は GitHub の式（ドル記号と二重の波括弧の形）を使わない（敷設の手順のプレースホルダーと形が重なるため）。
+name: drift-scan
+
+on:
+  schedule:
+    # 毎週月曜 00:23 UTC。遅れを減らすため、毎時の始まりを避ける
+    - cron: "23 0 * * 1"
+  workflow_dispatch:
+  # 走査そのものと、走査が読む文書と設定を変える pull request でだけ試す。
+  # pull_request_target にしない（フォークの pull request に書き込みの権限を渡さないため）。
+  pull_request:
+    paths:
+      - .github/workflows/drift-scan.yml
+      - scripts/harness/**
+      - docs/QUALITY_SCORE.md
+      - docs/exec-plans/tech-debt-tracker.md
+      - AGENTS.md
+      - package.json
+      # 走査が入れる依存の版と、公開する前の秘匿値の検査の設定
+      - package-lock.json
+      - .secretlintrc.json
+
+permissions:
+  contents: read
+
+# 同時実行の制御（concurrency）は置かない。予定実行と手動の実行が重なっても、それぞれが読むだけで書き込みを持たないため
+# （待ちの列が詰まって走査が止まることを避ける）。
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 文書と技術的負債の場所の変更の履歴を数えるため、履歴をすべて取得する
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          # 依存の cache は使わない（ほかのワークフローが書いた cache を、公開する前の確かめの道具に混ぜないため）。
+          # この入力の既定（true）では、条件によって cache を自動で使うので、明示して止める
+          package-manager-cache: false
+      - name: install（インストール用のスクリプトを動かさない）
+        run: npm ci --ignore-scripts
+      # 走査の中で、公開してよいかの検査も行う。通らなければ報告を消して失敗するので、次の段は動かない。
+      # 報告に書く保存期間は、下の upload の retention-days と同じ値にする
+      - name: drift-scan（走査と、公開してよいかの検査）
+        run: DRIFT_SCAN_RETENTION_DAYS=30 bash scripts/harness/drift-scan.sh --out drift-scan-out
+      # if: always() を付けない（公開してよいかの検査に通ったときだけ上げる）
+      - name: upload（報告だけを成果物に残す）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: drift-scan-report
+          path: drift-scan-out/report.md
+          if-no-files-found: error
+          retention-days: 30
