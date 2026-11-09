@@ -1,0 +1,36 @@
+# ハーネスの文書の検査とその試験。手元と同じスクリプトを、同じ順で実行する。マージの必須条件にする設定は、
+# GitHub のリポジトリの設定（ブランチの保護）で行う。アクションはコミットの SHA で固定し、版の名前をコメントに残す。
+# 言語ごとの lint・型・試験は、このファイルに足さない。それらを流す CI があれば、その CI が受け持つ。無ければ、足すかを利用者が決める。
+name: harness-docs
+
+# push は、すべてのブランチとタグで動かす
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-docs:
+    # ブランチやタグを消した push では、検査する中身が無い
+    if: github.event_name != 'push' || !github.event.deleted
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 検査の由来の記録の検査が、分岐元（pull request の base）との merge-base を求めるため、履歴をすべて取得する
+          fetch-depth: 0
+      - name: check-docs（文書の検査）
+        run: bash scripts/harness/check-docs.sh
+      # 採用した部品の試験も、この段で流す（部品が、この段の最後に行を足す）
+      - name: test-harness（文書の検査の試験と、早期通知・定期の走査の試験と、部品の試験）
+        run: |
+          bash scripts/harness/check-docs.test.sh
+          bash scripts/harness/notify.test.sh
+          bash scripts/harness/drift-scan.test.sh
+          bash scripts/harness/stack-adapter.test.sh

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git -c core.fsmonitor=false worktree list --porcelain | sed -n '1s/^worktree //p'); h=scripts/harness; harness_notify_git() { git --no-pager -C \"$root\" -c core.fsmonitor=false \"$@\"; }; test -n \"$root\" && test \"$(harness_notify_git rev-parse --is-bare-repository)\" = false && harness_notify_git cat-file -e \"HEAD:$h/notify.sh\" && harness_notify_git cat-file -e \"HEAD:$h/check-docs.sh\" && harness_notify_git diff --no-ext-diff --no-textconv --quiet HEAD -- \"$h\" && test -z \"$(harness_notify_git ls-files --others --exclude-standard -- \"$h\")\" && test -f \"$root/$h/notify.sh\" && exec /bin/bash \"$root/$h/notify.sh\" codex; printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"早期通知は動きませんでした（起動の前の確かめが成り立ちません）。作業は止めていません。\"}}'",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
