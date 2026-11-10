@@ -396,6 +396,9 @@ export function createClaudeTranslator(options: ClaudeTranslatorOptions): Claude
       running.add(handle);
 
       child.stdin?.on("error", () => {
+        // 渡す本文が無い呼び出し（認証の確かめ）では、子が標準入力を読まずに終わると Linux で EPIPE が出るが、
+        // 失われる本文が無いので失敗にしない。
+        if (input === "") return;
         // 子が標準入力を読まずに先に終わったときの EPIPE など。
         stdinOk = false;
         streamFailed = true;
