@@ -1,16 +1,16 @@
 # ARCHITECTURE
 
 このプロジェクトの現在の設計の正本。層、依存の向き、各層の責務、不変条件を書く。
-過去の判断の理由は設計判断の記録に置く（層の分け方は ADR 0002、通知済みの記録は ADR 0003）。
+過去の判断の理由は設計判断の記録に置く（層の分け方は ADR 0002、通知済みの記録は ADR 0003、翻訳の手段は ADR 0004）。
 
 ## 層と責務
 
 | 層 | パス | 責務 |
 |---|---|---|
-| 入口 | `src/index.ts` | 引数を読み、環境を整え（環境変数 `DEBUG` を消してから取得の部品を読み込む）、本物の部品を組み立てて実行の流れに渡し、結果を出力の行と終了コードにする。想定外の例外を受け止める |
-| 実行の流れ | `src/app/` | 1 回の実行の順序（`src/app/run.ts`）と、取得の結果だけを見せる試し取得（`src/app/inspect.ts`）、両者に共通の最初の段取り（秘匿値 → ロック → 外す。`src/app/session.ts`）、やり直しと投稿の間隔（`src/app/retry.ts`）、失敗の扱い。外とのやりとり・待ち・時刻は、差し替えの口（`src/app/ports.ts` の型）を通す。node の組み込みは使わない。`src/app/fakes.ts` は試験だけが読み込む偽物の口 |
-| 判定と文面 | `src/domain/` | 中立な事実からのポストの種類の判定と、通知する種類の規則（`src/domain/post.ts`）、候補の選び方と、並びをいつ読み終えるかの決まり（数える対象・順位・固定表示・初めての実行・漏れのおそれ・集め役。`src/domain/select.ts`）、通の文面と日本時間の書式と切り詰め（`src/domain/message.ts`）。入出力を持たない |
-| 外との接続 | `src/adapters/` | 秘匿値のファイル（`src/adapters/secrets.ts`）、対象のアカウントの設定（`src/adapters/config.ts`）、通知済みの記録（`src/adapters/record-file.ts`）、ロック（`src/adapters/lock-file.ts`）、X の取得（`src/adapters/x-scraper.ts`）、Slack の Webhook（`src/adapters/slack-webhook.ts`） |
+| 入口 | `src/index.ts` | 引数を読み、環境を整え（環境変数 `DEBUG` を消してから取得の部品を読み込む）、本物の部品を組み立てて実行の流れに渡し、結果を出力の行と終了コードにする。終了要求（`SIGTERM`・`SIGINT`）を受け止め、翻訳の子を止めて、実行の流れを上限つきで待つ。想定外の例外を受け止める |
+| 実行の流れ | `src/app/` | 1 回の実行の順序（`src/app/run.ts`）と、取得の結果だけを見せる試し取得（`src/app/inspect.ts`）、両者に共通の最初の段取り（秘匿値 → ロック → 外す。`src/app/session.ts`）、やり直しと投稿の間隔（`src/app/retry.ts`）、失敗の扱い。訳す流れと、訳だけを試す流れ（`src/app/translate.ts`）。外とのやりとり・待ち・時刻は、差し替えの口（`src/app/ports.ts` の型）を通す。node の組み込みは使わない。`src/app/fakes.ts` は試験だけが読み込む偽物の口 |
+| 判定と文面 | `src/domain/` | 中立な事実からのポストの種類の判定と、通知する種類の規則（`src/domain/post.ts`）、候補の選び方と、並びをいつ読み終えるかの決まり（数える対象・順位・固定表示・初めての実行・漏れのおそれ・集め役。`src/domain/select.ts`）、通の文面と日本時間の書式と切り詰め（`src/domain/message.ts`）、訳すかどうかの判定・守る部分の取り出し・手段によらない訳文の検証（`src/domain/translation.ts`）。入出力を持たない |
+| 外との接続 | `src/adapters/` | 秘匿値のファイル（`src/adapters/secrets.ts`）、対象のアカウントの設定（`src/adapters/config.ts`）、通知済みの記録（`src/adapters/record-file.ts`）、ロック（`src/adapters/lock-file.ts`）、X の取得（`src/adapters/x-scraper.ts`）、Slack の Webhook（`src/adapters/slack-webhook.ts`）、翻訳（`src/adapters/claude-translator.ts`。本文の包み・system prompt・認証の確かめ・子プロセスの管理を持つ） |
 
 対象のアカウントの設定は、リポジトリの根の config ディレクトリの accounts.json に置く（形は `{"accounts": ["AnthropicAI"]}`）。
 通知済みの記録は、リポジトリの外の `$XDG_STATE_HOME/x-dev-rss/`（環境変数が無いか、絶対パスでなければ `~/.local/state/x-dev-rss/`）に置く。
@@ -26,6 +26,7 @@
 - 外との接続は、判定と文面と、実行の流れの口の型（`src/app/ports.ts` だけ）を使う。
 - 判定と文面は、ほかの層も node の組み込みも使わない。
 - 取得のライブラリ（`@the-convocation/twitter-scraper`）を読み込んでよいのは `src/adapters/x-scraper.ts` だけである。
+- 子プロセスを起動してよいのは `src/adapters/claude-translator.ts` と `src/adapters/lock-file.ts` だけである。
 
 この決まりは、`eslint.config.js` の層ごとの `no-restricted-imports` が守らせ（`npm run lint`）、`src/architecture.test.ts` が
 その規則の働きを確かめる。試験のファイル（名前が .test.ts で終わるもの）は対象にしない。
@@ -46,6 +47,14 @@
 - 秘匿値のファイルが所有者以外にも読める権限なら、中身を読まずに止める。Slack への投稿は転送を追わない。
 - X の取得の方法（呼ぶメソッド・見張るエンドポイント・上限・応答の検査）は `src/adapters/x-scraper.ts` の 1 か所の定義にまとめる。
 - 異常な応答（タイムラインの構造が欠けた応答など）を「新しいポストは無い」として扱わない。
+- 翻訳の子プロセスへ渡す環境は、許す変数の表のものだけで、API の鍵と秘匿値を渡さない。
+- 翻訳の子プロセスには道具を使わせず、全体の設定・フック・MCP・`CLAUDE.md` を読ませず、セッションを残さない。作業ディレクトリは、
+  親に `CLAUDE.md` と `.claude` の無い置き場に実行ごとに作る空の一時ディレクトリで、隔離を確かめられないときは訳さない。
+- 認証が契約のログインであることを実行のたびに確かめ、確かめられないときは訳さない。
+- ポストの本文は信頼できない入力として扱い、標準入力で包んで渡し（起動の引数に入れない）、訳文は検証を通ったものだけを使う。
+- 翻訳の失敗で通知を止めず（原文のまま印を付けて投稿する）、翻訳の部品は例外を外へ出さず、起動した子プロセス（認証の確かめの子を含む）を
+  実行の終わり・時間切れ・終了要求で必ず止め、終了要求の後は新しい子を起動しない。`run` は印を見て、以後の取得・投稿・投稿しない ID の
+  記録を止める。送信を終えた投稿の記録は書く（二重の通知を避けるため）。
 
 ## 中核的な原則
 
@@ -54,3 +63,6 @@
 - 取得の手段（ライブラリ）の型は `src/adapters/x-scraper.ts` の中に閉じ込め、取得の手段を替えるときに直すのが、そのファイルと
   入口の組み立てだけで済むようにする。
 - 通知する種類の規則（いまは通常のポストだけ）と「20 件」の数え方は、判定と文面の 1 か所ずつにまとめる。
+- 翻訳の手段は `src/adapters/claude-translator.ts` の中に閉じ込め、手段を替えるときに直すのが、そのファイルと入口の組み立て
+  （と `eslint.config.js` の子プロセスの許可の一覧）だけで済むようにする。
+- 費用は、所有者の既存の契約の範囲を超えて追加で発生させない。翻訳は契約の Claude Code で行い、API の鍵での従量課金を使わない（ADR 0004）。

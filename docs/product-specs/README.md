@@ -115,3 +115,4 @@
 | 略号 | 仕様 | 題 | 状態 |
 |---|---|---|---|
 | XPOST | [x-post-to-slack.md](x-post-to-slack.md) | X のポストを取得し、まだ通知していないものを Slack へ投稿する | approved |
+| XPJA | [x-post-japanese.md](x-post-japanese.md) | Slack へ通知するポストの本文を日本語に訳す | approved |

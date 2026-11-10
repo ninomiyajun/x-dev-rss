@@ -10,6 +10,7 @@ import { containsSecret, fakePost, fetched, harness, FAKE_SECRETS, TARGET_USER_I
 import type { Harness } from "./fakes.ts";
 import type { FetchResult } from "./ports.ts";
 import { RETRY_DELAYS_MS } from "./retry.ts";
+import { TRANSLATE_RETRY_DELAY_MS } from "./translate.ts";
 import { createRecordFile, RECORD_FILE_NAME } from "../adapters/record-file.ts";
 import { createLockFile } from "../adapters/lock-file.ts";
 
@@ -479,4 +480,349 @@ test("秘匿値のファイルの権限の問題は、それぞれの決まっ�
     assert.equal(h.lines.length, 1);
     assert.equal(h.fetcherMade + h.posterMade, 0);
   }
+});
+
+// ---- 翻訳（計画の手順 6。仕様 XPJA） ----
+
+const EN = "We're releasing a new model today.";
+const JA = "本日、新しいモデルを公開します。";
+const XPJA2 = "Run `claude --help` with @claudeai and read https://www.anthropic.com/news #AI";
+const FAKE_TOKEN = "sk-ant-oat01-FAKE.not.a.real.token";
+const TRANSLATED = "（機械翻訳）";
+const FAILED = "（翻訳に失敗したため原文のまま）";
+
+function enPost(id: number, text: string) {
+  return fakePost(id, { text, postedAt: new Date("2026-11-09T01:30:00Z") });
+}
+
+function message(id: number, body: string, mark?: string): string {
+  return ["@AnthropicAI", "2026-11-09 10:30（日本時間）", body, ...(mark === undefined ? [] : [mark]), `https://x.com/AnthropicAI/status/${id}`].join("\n");
+}
+
+function assertNoLeaks(h: Harness): void {
+  assertNoSecrets(h);
+  for (const text of [...h.lines, ...h.poster.attempts]) assert.ok(!text.includes(FAKE_TOKEN), text);
+  for (const call of h.translator.calls) assert.ok(!containsSecret(call.text), call.text);
+}
+
+test("XPJA-1: 英語のポストは、訳した本文と機械翻訳の印を、見出し → 本文 → 印 → URL の順の 1 通で投稿し、原文を含めない", async () => {
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN), fakePost(0)]) } });
+  h.translator.set(EN, { ok: true, text: JA });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, JA, TRANSLATED)]);
+  assert.ok(!h.poster.received[0]?.includes(EN));
+  assert.ok(!h.poster.received[0]?.includes(FAILED));
+  assert.deepEqual(h.lines, ["通知した件数: 1"]);
+  assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"]);
+  assert.deepEqual(h.translator.calls, [{ text: EN, attempt: 1 }]);
+  assertNoLeaks(h);
+});
+
+test("XPJA-2: 守る部分を残し、日本語の文字に隣り合う訳文は通り、機械翻訳の印が付く", async () => {
+  const good = "`claude --help`を@claudeaiと一緒に実行し、https://www.anthropic.com/newsをご覧ください #AI";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, XPJA2)]) } });
+  h.translator.set(XPJA2, { ok: true, text: good });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, good, TRANSLATED)]);
+});
+
+test("XPJA-2: 通らないべき訳文は、2 回試しても翻訳の失敗として原文に失敗の印を付ける", async () => {
+  const good = "`claude --help`を@claudeai と一緒に実行し、https://www.anthropic.com/news をご覧ください #AI";
+  const bad = [
+    good.replace(" #AI", ""),
+    good.replace("@claudeai", "@Claudeai"),
+    good.replace("@claudeai", "@claudeai2"),
+    `${good} https://www.anthropic.com/news`,
+    `${good} https://example.com/x`,
+    `${good} @someone`,
+    `${good} ${XPJA2}`,
+    "了解しました",
+  ];
+  for (const translated of bad) {
+    const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, XPJA2)]) } });
+    h.translator.set(XPJA2, { ok: true, text: translated });
+    assert.equal(await run(h.deps), 0, translated);
+    assert.deepEqual(h.poster.received, [message(1, XPJA2, FAILED)], translated);
+    assert.deepEqual(h.translator.calls.map((c) => c.attempt), [1, 2], translated);
+    assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 1", "通知した件数: 1"], translated);
+    assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"], translated);
+  }
+});
+
+test("XPJA-3: 2 回とも失敗したら、原文の全文に失敗の印を付けて投稿・記録し、件数の行の前に失敗の 1 行。終了コード 0", async () => {
+  for (const reason of ["unavailable", "failed", "timeout"] as const) {
+    const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN)]) } });
+    h.translator.set(EN, { ok: false, reason });
+    assert.equal(await run(h.deps), 0, reason);
+    assert.deepEqual(h.poster.received, [message(1, EN, FAILED)], reason);
+    assert.ok(!h.poster.received[0]?.includes(TRANSLATED));
+    assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 1", "通知した件数: 1"], reason);
+    assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"], reason);
+    // 失敗を知らせる別の通は無い
+    assert.equal(h.poster.attempts.length, 1, reason);
+    assertNoLeaks(h);
+  }
+});
+
+test("XPJA-3: 翻訳に失敗したポストが 2 件以上でも、失敗の行は件数を含む 1 行", async () => {
+  const other = "Another update from our team today.";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, other), enPost(1, EN)]) } });
+  // 原文の丸写し（5 語以上）は検証を通らない
+  h.translator.fallback = (text) => ({ ok: true, text });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, EN, FAILED), message(2, other, FAILED)]);
+  assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 2", "通知した件数: 2"]);
+});
+
+test("XPJA-3 / D14: 翻訳の口が例外を投げても、失敗の扱いで終了コード 0。例外の文面は出ない", async () => {
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN)]) } });
+  h.translator.set(EN, "throw");
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, EN, FAILED)]);
+  assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 1", "通知した件数: 1"]);
+  assertNoLeaks(h);
+});
+
+test("XPJA-3: 2 回目の試みは attempt 2 で、1 回目との間に 5 秒待つ", async () => {
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN)]) } });
+  h.translator.set(EN, { ok: false, reason: "timeout" }, { ok: true, text: JA });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.translator.calls, [
+    { text: EN, attempt: 1 },
+    { text: EN, attempt: 2 },
+  ]);
+  assert.deepEqual(h.time.sleeps, [5000]);
+  assert.deepEqual(h.poster.received, [message(1, JA, TRANSLATED)]);
+  assert.deepEqual(h.lines, ["通知した件数: 1"]);
+});
+
+test("XPJA-3 / D5: 2 回とも接続の失敗だったら、同じ実行の後のポストは訳さずに失敗の印を付ける", async () => {
+  const other = "Another update from our team today.";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(3, JA), enPost(2, other), enPost(1, EN)]) } });
+  h.translator.set(EN, { ok: false, reason: "failed" });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, EN, FAILED), message(2, other, FAILED), message(3, JA)]);
+  assert.deepEqual(h.translator.calls.map((c) => c.text), [EN, EN]);
+  assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 2", "通知した件数: 3"]);
+});
+
+test("XPJA-3: 投稿の失敗で止まるときも、それまでの翻訳の失敗の 1 行を出す", async () => {
+  const other = "Another update from our team today.";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, other), enPost(1, EN)]) } });
+  h.translator.set(EN, { ok: false, reason: "failed" });
+  h.poster.fail = (text) => (text.includes("/status/2") ? { ok: false, retryable: false } : undefined);
+  assert.equal(await run(h.deps), 1);
+  assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 2", "Slack への投稿に失敗したため止めました（通知した件数: 1）"]);
+});
+
+test("XPJA-3: 記録の書き込みの失敗で止まるときも、それまでの翻訳の失敗の 1 行を出す", async () => {
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN)]) } });
+  h.translator.set(EN, { ok: false, reason: "failed" });
+  h.record.failAdd = () => true;
+  assert.equal(await run(h.deps), 1);
+  assert.equal(h.lines[0], "翻訳に失敗したため原文のまま投稿したポストの件数: 1");
+  assert.ok(h.lines.includes("通知済みの記録に書き込めなかったため止めました（記録を直してから実行すると、同じポストが再び投稿されることがあります）"));
+});
+
+test("XPJA-4: 日本語の文だけのポストと URL だけのポストは、翻訳を呼ばず、原文と 1 文字も違わない本文で印なし", async () => {
+  const url = "https://www.anthropic.com/news";
+  const ja = "本日、新しいモデルを公開しました。";
+  for (const setup of [(h: Harness) => h.translator.set(ja, { ok: true, text: "x" }), (h: Harness) => (h.translator.fallback = () => ({ ok: false, reason: "failed" }))]) {
+    const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, url), enPost(1, ja)]) } });
+    setup(h);
+    assert.equal(await run(h.deps), 0);
+    assert.deepEqual(h.poster.received, [message(1, ja), message(2, url)]);
+    assert.deepEqual(h.translator.calls, []);
+    assert.deepEqual(h.lines, ["通知した件数: 2"]);
+    assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1", "2"]);
+  }
+});
+
+test("XPJA-5: 長い訳文は本文だけを切り詰め、機械翻訳の印と URL を残して上限に収める", async () => {
+  const limit = 200;
+  const long = `${"新しいモデルを公開します。".repeat(20)}`;
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, EN)]) }, textLimit: limit });
+  h.translator.set(EN, { ok: true, text: long });
+  // 長さの検証（原文の 3 倍 + 200 文字以下）を通る長さにする
+  assert.ok(Array.from(long).length <= EN.length * 3 + 200);
+  assert.equal(await run(h.deps), 0);
+  const sent = h.poster.received[0] ?? "";
+  assert.ok(h.poster.measure(sent) <= limit);
+  assert.ok(sent.endsWith(`…（長いため途中まで）\n${TRANSLATED}\nhttps://x.com/AnthropicAI/status/1`), sent);
+});
+
+test("XPJA-5: 翻訳に失敗した長い原文も、本文だけを切り詰め、失敗の印と URL を残す", async () => {
+  const limit = 200;
+  const long = "This is a long English post about our new model. ".repeat(10);
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, long)]) }, textLimit: limit });
+  h.translator.set(long, { ok: false, reason: "failed" });
+  assert.equal(await run(h.deps), 0);
+  const sent = h.poster.received[0] ?? "";
+  assert.ok(h.poster.measure(sent) <= limit);
+  assert.ok(sent.endsWith(`…（長いため途中まで）\n${FAILED}\nhttps://x.com/AnthropicAI/status/1`), sent);
+});
+
+test("XPJA-6: 翻訳の場面（訳せた・失敗した・使用量の上限）で、出力・通・記録・翻訳に渡した本文に秘匿値もトークンも無い", async () => {
+  const scenes: ((h: Harness) => void)[] = [
+    (h) => h.translator.set(EN, { ok: true, text: JA }),
+    (h) => h.translator.set(EN, "throw"),
+    (h) => h.translator.set(EN, { ok: false, reason: "unavailable" }),
+  ];
+  for (const scene of scenes) {
+    const dir = await mkdtemp(join(tmpdir(), "x-dev-rss-test-"));
+    const h = harness({ fetch: { AnthropicAI: fetched([enPost(1, EN)]) } });
+    h.deps.record = createRecordFile(dir);
+    scene(h);
+    assert.equal(await run(h.deps), 0);
+    assertNoLeaks(h);
+    assert.deepEqual(h.translator.calls.map((c) => c.text), h.translator.calls.map(() => EN));
+    for (const name of await readdir(dir)) {
+      const text = await readFile(join(dir, name), "utf8");
+      assert.ok(!containsSecret(text) && !text.includes(FAKE_TOKEN));
+    }
+    await rm(dir, { recursive: true });
+  }
+});
+
+test("XPJA-7: 使用量の上限や契約のログインでないとき（unavailable）は失敗の扱いで終了コード 0。後のポストは訳さない", async () => {
+  const other = "Another update from our team today.";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, other), enPost(1, EN)]) } });
+  h.translator.fallback = () => ({ ok: false, reason: "unavailable" });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, EN, FAILED), message(2, other, FAILED)]);
+  // 1 回目が unavailable なら 2 回目を試さず待たずに止める（D21）
+  assert.equal(h.translator.calls.length, 1);
+  assert.ok(!h.time.sleeps.includes(TRANSLATE_RETRY_DELAY_MS));
+  assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 2", "通知した件数: 2"]);
+  assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1", "2"]);
+});
+
+test("XPJA-8: 2 件の英語のポストを古い順に訳して投稿・記録し、2 回目は「新しいポストはありません」の 1 通だけ", async () => {
+  const a = "Introducing a new feature for developers.";
+  const b = "Our research team published a new paper.";
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, b), enPost(1, a), fakePost(0)]) } });
+  h.translator.set(a, { ok: true, text: "開発者向けの新機能を紹介します。" });
+  h.translator.set(b, { ok: true, text: "研究チームが新しい論文を公開しました。" });
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, [message(1, "開発者向けの新機能を紹介します。", TRANSLATED), message(2, "研究チームが新しい論文を公開しました。", TRANSLATED)]);
+  assert.deepEqual(h.lines, ["通知した件数: 2"]);
+  h.poster.received = [];
+  h.lines.length = 0;
+  assert.equal(await run(h.deps), 0);
+  assert.deepEqual(h.poster.received, ["新しいポストはありません（確かめたアカウント: @AnthropicAI）"]);
+  assert.deepEqual(h.lines, ["通知した件数: 0"]);
+});
+
+test("XPJA-9: 4 語以下で原文と同じ文字が返れば、1 回目で印なしの原文。2 回目を試さず、失敗の行が無く、記録される", async () => {
+  for (const text of ["Claude Opus 5", "Claude Code for Teams", "Claude 5 の新機能 Opus Code Max"]) {
+    const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, text)]) } });
+    h.translator.set(text, { ok: true, text });
+    assert.equal(await run(h.deps), 0, text);
+    assert.deepEqual(h.poster.received, [message(1, text)], text);
+    assert.equal(h.translator.calls.length, 1, text);
+    assert.deepEqual(h.time.sleeps, [], text);
+    assert.deepEqual(h.lines, ["通知した件数: 1"], text);
+    assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"], text);
+  }
+});
+
+test("XPJA-10: 5 語以上で原文と同じ文字が返ったときと、4 語以下で翻訳の手段が使えないときは、失敗の扱い", async () => {
+  // 3 つ目は翻訳を呼ぶ回数（unavailable のときは 2 回目を試さない。D21）
+  const scenes: [string, FakeTranslationLike, number][] = [
+    ["Meet the new Claude model", { ok: true, text: "Meet the new Claude model" }, 2],
+    ["新製品 Alpha, Beta, Gamma, Delta, Epsilon", { ok: true, text: "新製品 Alpha, Beta, Gamma, Delta, Epsilon" }, 2],
+    ["Claude Opus 5", { ok: false, reason: "unavailable" }, 1],
+    ["Claude Opus 5", { ok: false, reason: "failed" }, 2],
+    ["Claude Opus 5", { ok: false, reason: "timeout" }, 2],
+  ];
+  for (const [text, result, callCount] of scenes) {
+    const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, text)]) } });
+    h.translator.set(text, result);
+    assert.equal(await run(h.deps), 0, text);
+    assert.deepEqual(h.poster.received, [message(1, text, FAILED)], text);
+    assert.equal(h.translator.calls.length, callCount, text);
+    assert.deepEqual(h.lines, ["翻訳に失敗したため原文のまま投稿したポストの件数: 1", "通知した件数: 1"], text);
+    assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"], text);
+  }
+});
+
+type FakeTranslationLike = Parameters<Harness["translator"]["set"]>[1];
+
+// ---- 終了要求（D14） ----
+
+test("D14: 訳の途中で終了要求の印が立つと、投稿も記録の書き込みも件数の行も行わずに戻り、ロックは外れる", async () => {
+  let flag = false;
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, "Second English post for today."), enPost(1, EN)]) } });
+  h.deps.interrupted = () => flag;
+  h.translator.onCall = () => {
+    flag = true;
+  };
+  h.translator.set(EN, { ok: false, reason: "unavailable" });
+  await run(h.deps);
+  assert.deepEqual(h.poster.attempts, []);
+  assert.deepEqual(h.record.writes, []);
+  assert.deepEqual(h.lines, []);
+  assert.equal(h.lock.released, 1);
+});
+
+test("D14: 印が立った後は、「新しいポストはありません」を投稿せず、次のアカウントの取得もしない", async () => {
+  let flag = false;
+  const h = harness({ accounts: ["AnthropicAI", "Q"], record: { AnthropicAI: ["1"], Q: ["2"] }, fetch: { AnthropicAI: fetched([fakePost(1)]), Q: fetched([fakePost(2)]) } });
+  h.deps.interrupted = () => flag;
+  const inner = h.fetcher.fetchAccount.bind(h.fetcher);
+  h.fetcher.fetchAccount = async (account) => {
+    const result = await inner(account);
+    flag = true;
+    return result;
+  };
+  await run(h.deps);
+  assert.deepEqual(h.fetcher.calls, ["AnthropicAI"]);
+  assert.deepEqual(h.poster.attempts, []);
+  assert.deepEqual(h.lines, []);
+});
+
+test("D14: 投稿の送信中に印が立っても、送信を終えた投稿は記録し、次のポストは訳さず投稿もしない", async () => {
+  let flag = false;
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(2, JA), enPost(1, JA)]) } });
+  h.deps.interrupted = () => flag;
+  h.poster.fail = () => {
+    flag = true;
+    return undefined;
+  };
+  await run(h.deps);
+  assert.deepEqual(postedIds(h), ["1"]);
+  assert.deepEqual(h.record.ids("AnthropicAI"), ["0", "1"]);
+  assert.equal(h.poster.attempts.length, 1);
+  assert.deepEqual(h.lines, []);
+});
+
+test("D14: Slack の再試行の待ちの間に印が立つと、次の投稿の試行をせず、失敗の行も出さない", async () => {
+  let flag = false;
+  const h = harness({ record: { AnthropicAI: ["0"] }, fetch: { AnthropicAI: fetched([enPost(1, JA)]) } });
+  h.deps.interrupted = () => flag;
+  h.poster.fail = () => ({ ok: false, retryable: true });
+  const sleep = h.deps.sleep;
+  h.deps.sleep = async (ms) => {
+    await sleep(ms);
+    flag = true;
+  };
+  await run(h.deps);
+  assert.equal(h.poster.attempts.length, 1);
+  assert.deepEqual(h.record.writes, []);
+  assert.deepEqual(h.lines, []);
+});
+
+test("D14: X の取得の再試行の待ちの間に印が立つと、次の取得の試行をせず、何も投稿しない", async () => {
+  let flag = false;
+  const h = harness({ fetch: { AnthropicAI: [fail("temporary"), fetched([fakePost(1)])] } });
+  h.deps.interrupted = () => flag;
+  const sleep = h.deps.sleep;
+  h.deps.sleep = async (ms) => {
+    await sleep(ms);
+    flag = true;
+  };
+  await run(h.deps);
+  assert.deepEqual(h.fetcher.calls, ["AnthropicAI"]);
+  assert.deepEqual(h.poster.attempts, []);
+  assert.deepEqual(h.lines, []);
 });

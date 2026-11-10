@@ -74,9 +74,22 @@ export interface PostPort {
   post(text: string): Promise<PostResult>;
 }
 
+/** 翻訳の結果（計画の D9）。失敗の理由の値に、外から受け取った出力やエラーの原文は入れない。 */
+export type TranslateResult = { ok: true; text: string } | { ok: false; reason: "unavailable" | "failed" | "timeout" };
+
+export interface TranslatePort {
+  /**
+   * 本文を日本語に訳す。attempt の 1 は最初の試み、2 は検証を通らなかったか失敗した後のやり直し。
+   * 手段は、2 のときに、より強いやり方（大きいモデルなど）を選んでよい。口は例外を投げず、失敗は ok: false で返す。
+   */
+  translate(text: string, attempt: 1 | 2): Promise<TranslateResult>;
+}
+
 export type Sleep = (ms: number) => Promise<void>;
 export type Clock = () => number;
 export type Output = (line: string) => void;
+/** 終了要求を受けた印を読む（D14）。入口が終了要求の処理で立てる。 */
+export type Interrupted = () => boolean;
 
 export type RunDeps = {
   secrets: SecretsPort;
@@ -85,6 +98,10 @@ export type RunDeps = {
   record: RecordPort;
   makeFetcher(bundle: SecretBundle): FetchPort;
   makePoster(bundle: SecretBundle): PostPort;
+  /** 翻訳の口（D9）。秘匿値の束から作らない。 */
+  translator: TranslatePort;
+  /** 終了要求を受けた印（D14）。立っていない間は false。 */
+  interrupted: Interrupted;
   sleep: Sleep;
   now: Clock;
   out: Output;

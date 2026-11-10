@@ -10,6 +10,7 @@ import {
   postMessage,
   RECORD_UNREADABLE,
   RECORD_WRITE_FAILED,
+  translationFailedLine,
 } from "../domain/message.ts";
 import type { AccountFailure } from "../domain/message.ts";
 import { classifyAll } from "../domain/post.ts";
@@ -17,21 +18,37 @@ import { selectForAccount } from "../domain/select.ts";
 import type { RunDeps } from "./ports.ts";
 import { fetchWithRetry, PacedPoster } from "./retry.ts";
 import { withSession } from "./session.ts";
+import { bodyFor, newTranslationState } from "./translate.ts";
 
-/** 1 回の実行。終了コードを返す（取得・設定・記録・投稿の失敗があれば 1、ほかは 0）。 */
+/** 終了要求で止めたときに本体が返す値。入口が終了コード 130 か 143 で上書きするので意味を持たない（D14）。 */
+const INTERRUPTED_CODE = 0;
+
+/**
+ * 1 回の実行。終了コードを返す（取得・設定・記録・投稿の失敗があれば 1、ほかは 0。翻訳の失敗では 1 にしない）。
+ * 終了要求の印が立ったら、以後の取得・記録の書き込み・投稿・まとめの通・件数の行を行わずに戻る（D14）。
+ * ただし、送信を終えた投稿の記録は書く（入口が待つのは、送信中の投稿とその後の記録の書き込みのため）。
+ */
 export function run(deps: RunDeps): Promise<number> {
   return withSession(deps, async (bundle) => {
-    const poster = new PacedPoster(deps.makePoster(bundle), deps.sleep, deps.now);
+    const poster = new PacedPoster(deps.makePoster(bundle), deps.sleep, deps.now, deps.interrupted);
     const fetcher = deps.makeFetcher(bundle);
+    const translation = newTranslationState();
+    let translationFailures = 0;
+    /** 翻訳の失敗が 1 件以上あれば、その 1 行を出す（XPJA-3）。 */
+    const reportTranslationFailures = () => {
+      if (translationFailures > 0) deps.out(translationFailedLine(translationFailures));
+    };
 
     const config = await deps.config.read();
     if (!config.ok) {
+      if (deps.interrupted()) return INTERRUPTED_CODE;
       await poster.post(CONFIG_UNREADABLE);
       deps.out(CONFIG_UNREADABLE);
       return 1;
     }
     const record = await deps.record.read();
     if (!record.ok) {
+      if (deps.interrupted()) return INTERRUPTED_CODE;
       await poster.post(RECORD_UNREADABLE);
       deps.out(RECORD_UNREADABLE);
       return 1;
@@ -51,6 +68,7 @@ export function run(deps: RunDeps): Promise<number> {
         await deps.record.add(account, ids);
         return true;
       } catch {
+        reportTranslationFailures();
         const texts = [RECORD_WRITE_FAILED];
         const lines = [RECORD_WRITE_FAILED];
         if (missed.length > 0) {
@@ -68,7 +86,8 @@ export function run(deps: RunDeps): Promise<number> {
     };
 
     for (const account of config.accounts) {
-      const result = await fetchWithRetry(() => fetcher.fetchAccount(account), deps.sleep);
+      if (deps.interrupted()) return INTERRUPTED_CODE;
+      const result = await fetchWithRetry(() => fetcher.fetchAccount(account), deps.sleep, deps.interrupted);
       if (!result.ok) {
         failures.push({ account, kind: result.kind });
         continue;
@@ -79,15 +98,24 @@ export function run(deps: RunDeps): Promise<number> {
       if (selection.maybeMissed) missed.push(account);
       // 投稿しないと決めた ID を先に記録する。初めての実行では、ID が無くてもアカウントの項目を作る。
       if (recorded === undefined || selection.toRecordWithoutPosting.length > 0) {
+        if (deps.interrupted()) return INTERRUPTED_CODE;
         if (!(await write(account, selection.toRecordWithoutPosting))) return 1;
       }
       for (const post of selection.toPost) {
-        const sent = await poster.post(postMessage(post, account, poster.textLimit, (t) => poster.measure(t)));
+        if (deps.interrupted()) return INTERRUPTED_CODE;
+        const { body, failed } = await bodyFor(post.text, deps, translation);
+        if (deps.interrupted()) return INTERRUPTED_CODE;
+        if (failed) translationFailures++;
+        const sent = await poster.post(postMessage(post, body, account, poster.textLimit, (t) => poster.measure(t)));
         if (!sent.ok) {
+          // 再試行の待ちの間に終了要求を受けて止めたときは、失敗の行を出さない。
+          if (deps.interrupted()) return INTERRUPTED_CODE;
+          reportTranslationFailures();
           deps.out(postFailedLine(posted));
           return 1;
         }
         posted++;
+        // 送信を終えた投稿は、終了要求を受けていても記録する（次の実行で二重に通知しないため。D14）。
         if (!(await write(account, [post.id]))) return 1;
       }
     }
@@ -100,13 +128,17 @@ export function run(deps: RunDeps): Promise<number> {
       summaries.push({ text: noNewPostsMessage(succeeded), line: "" });
     }
     for (const s of summaries) {
+      if (deps.interrupted()) return INTERRUPTED_CODE;
       const sent = await poster.post(s.text);
+      if (!sent.ok && deps.interrupted()) return INTERRUPTED_CODE;
       if (s.line !== "") deps.out(s.line);
       if (!sent.ok) {
+        reportTranslationFailures();
         deps.out(postFailedLine(posted));
         return 1;
       }
     }
+    reportTranslationFailures();
     deps.out(countLine(posted));
     return failures.length > 0 ? 1 : 0;
   });

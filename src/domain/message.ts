@@ -37,16 +37,27 @@ export function formatJst(date: Date): string {
 
 export const TRUNCATION_MARK = "…（長いため途中まで）";
 
+/** 機械翻訳の印（仕様 XPJA の語の定義）。翻訳の手段で訳した本文にだけ付ける。 */
+export const MACHINE_TRANSLATED_MARK = "（機械翻訳）";
+/** 翻訳の失敗の印（仕様 XPJA の語の定義）。訳そうとして訳せなかった本文にだけ付ける。 */
+export const TRANSLATION_FAILED_MARK = "（翻訳に失敗したため原文のまま）";
+
+export type TranslationMark = typeof MACHINE_TRANSLATED_MARK | typeof TRANSLATION_FAILED_MARK;
+
+/** 通に載せる本文と、その後の行に付ける印（印が無いこともある）。 */
+export type PostBody = { text: string; mark?: TranslationMark };
+
 /**
- * ポストの通。1 行目にアカウント名、2 行目に日本時間の日時、3 行目から本文、最後の行に URL。
- * 書き換えた後の長さ（measure）が上限（limit）を超えるときは、本文を切り詰めて印を付ける（D7）。
+ * ポストの通。1 行目にアカウント名、2 行目に日本時間の日時、3 行目から本文、印があれば本文の次の行に印、最後の行に URL（計画の D8）。
+ * 書き換えた後の長さ（measure）が上限（limit）を超えるときは、本文だけを切り詰めて切り詰めの印を付け、印と URL は残す（D7・XPJA-5）。
  */
-export function postMessage(post: PostFacts, account: string, limit: number, measure: (text: string) => number): string {
+export function postMessage(post: PostFacts, body: PostBody, account: string, limit: number, measure: (text: string) => number): string {
   const head = `@${account}\n${formatJst(postedAtOf(post))}（日本時間）\n`;
-  const build = (body: string) => `${head}${body}\n${post.url}`;
-  const full = build(post.text);
+  const tail = body.mark === undefined ? `\n${post.url}` : `\n${body.mark}\n${post.url}`;
+  const build = (text: string) => `${head}${text}${tail}`;
+  const full = build(body.text);
   if (measure(full) <= limit) return full;
-  const chars = Array.from(post.text);
+  const chars = Array.from(body.text);
   // 印を付けた形が上限に収まる、最も長い本文の先頭を探す。
   let lo = 0;
   let hi = chars.length;
@@ -118,4 +129,36 @@ export function secretsProblemLine(missing: readonly string[], malformed: readon
   if (missing.length > 0) parts.push(`秘匿値が足りません: ${missing.join("、")}`);
   if (malformed.length > 0) parts.push(`秘匿値の形が違います: ${malformed.join("、")}`);
   return parts.join("。");
+}
+
+/** 翻訳の失敗の出力の 1 行（1 回の実行で 1 行。XPJA-3）。 */
+export function translationFailedLine(count: number): string {
+  return `翻訳に失敗したため原文のまま投稿したポストの件数: ${count}`;
+}
+
+// ---- 訳だけを試す流れ（--try-translate）の固定の文面（D18）。行の順は実行の流れが決める ----
+
+/** 1 行目: 訳した（判定が英語のポストとし、訳文が検証を通った）。 */
+export const TRY_TRANSLATED = "訳した";
+/** 1 行目: 訳さなかった（日本語のポストか、訳す文の無いポストか、訳す必要の無いポスト）。 */
+export const TRY_NOT_TRANSLATED = "訳さなかった";
+/** 1 行目: 翻訳に失敗した（原文のまま）。 */
+export const TRY_TRANSLATION_FAILED = "翻訳に失敗した";
+
+/** 所要時間の行。 */
+export function translationDurationLine(seconds: number): string {
+  return `所要時間: ${seconds.toFixed(1)} 秒`;
+}
+
+/** 標準入力の本文が長すぎるときの行。 */
+export function tryTranslateTooLongLine(limit: number): string {
+  return `本文が長すぎるため訳しませんでした（${limit} 文字まで）`;
+}
+
+/** 終了要求で止めたときの 1 行（D14）。 */
+export const INTERRUPTED = "中断の要求を受けたため止めました";
+
+/** 試し取得の --show-text の本文の行（本文の改行で行が分かれないよう、JSON の文字列の形で書く。D17）。 */
+export function showTextLine(text: string): string {
+  return `本文=${JSON.stringify(text)}`;
 }

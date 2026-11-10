@@ -14,6 +14,8 @@ import type {
   RunDeps,
   SecretBundle,
   SecretsPort,
+  TranslatePort,
+  TranslateResult,
 } from "./ports.ts";
 
 export const FAKE_SECRETS = {
@@ -145,6 +147,36 @@ export class MemoryLock implements LockPort {
   }
 }
 
+/** 翻訳の偽物が返すもの。"throw" は、口の約束に反して例外を投げる。 */
+export type FakeTranslation = TranslateResult | "throw";
+
+/**
+ * 翻訳の口の偽物。呼ばれた本文と回数（attempt）を残す。本文ごと・回数ごとに返す結果を試験が決められる。
+ * 決めていない本文には、本文の前に「訳文の」を付けた文を返す。
+ */
+export class FakeTranslator implements TranslatePort {
+  calls: { text: string; attempt: 1 | 2 }[] = [];
+  private readonly script = new Map<string, FakeTranslation[]>();
+  /** 決めていない本文に返す結果。 */
+  fallback: (text: string, attempt: 1 | 2) => FakeTranslation = (text) => ({ ok: true, text: `訳文の${text}` });
+  /** 呼ばれたときに、結果を返す前に動かす処理（試験で終了要求の印を立てるなど）。 */
+  onCall: (text: string, attempt: 1 | 2) => void = () => {};
+
+  /** 本文に返す結果を、1 回目・2 回目の順に決める（1 つだけなら両方に使う）。 */
+  set(text: string, ...results: FakeTranslation[]): void {
+    this.script.set(text, results);
+  }
+
+  async translate(text: string, attempt: 1 | 2): Promise<TranslateResult> {
+    this.calls.push({ text, attempt });
+    this.onCall(text, attempt);
+    const list = this.script.get(text);
+    const result = list === undefined ? this.fallback(text, attempt) : (list[Math.min(attempt, list.length) - 1] as FakeTranslation);
+    if (result === "throw") throw new Error(`fake translator failure ${FAKE_SECRETS.X_CT0}`);
+    return result;
+  }
+}
+
 /** 差し替えの待ちと時刻。待つと時刻が進む。 */
 export class FakeTime {
   current = 1_800_000_000_000;
@@ -165,6 +197,7 @@ export type Harness = {
   record: MemoryRecord;
   lock: MemoryLock;
   time: FakeTime;
+  translator: FakeTranslator;
   lines: string[];
   fetcherMade: number;
   posterMade: number;
@@ -182,6 +215,7 @@ export function harness(options: {
   const record = new MemoryRecord(options.record ?? {});
   const lock = new MemoryLock();
   const time = new FakeTime();
+  const translator = new FakeTranslator();
   const lines: string[] = [];
   const accounts = options.accounts === undefined ? ["AnthropicAI"] : options.accounts;
   const config: ConfigPort = {
@@ -195,6 +229,7 @@ export function harness(options: {
     record,
     lock,
     time,
+    translator,
     lines,
     fetcherMade: 0,
     posterMade: 0,
@@ -211,6 +246,8 @@ export function harness(options: {
         h.posterMade++;
         return poster;
       },
+      translator,
+      interrupted: () => false,
       sleep: time.sleep,
       now: time.now,
       out: (line) => lines.push(line),

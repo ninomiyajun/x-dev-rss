@@ -22,3 +22,4 @@ ADR を足したら、この表に行を足す（`bash scripts/harness/check-doc
 | 0001 | [X の Cookie を secretlint で検出する](0001-detect-x-cookies.md) | 採用 |
 | 0002 | [層を 4 つに分け、依存の向きを lint で守らせる](0002-layers.md) | 採用 |
 | 0003 | [通知済みの記録を、XDG の状態の置き場の JSON の 1 ファイルに置く](0003-notified-record.md) | 採用 |
+| 0004 | [翻訳の手段に、手元の Claude Code を画面なしで使う](0004-translate-with-claude-code.md) | 採用 |
