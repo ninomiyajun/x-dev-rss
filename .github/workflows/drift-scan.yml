@@ -44,7 +44,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: lts/*
+          node-version: 26
           # 依存の cache は使わない（ほかのワークフローが書いた cache を、公開する前の確かめの道具に混ぜないため）。
           # この入力の既定（true）では、条件によって cache を自動で使うので、明示して止める
           package-manager-cache: false

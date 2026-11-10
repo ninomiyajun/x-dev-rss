@@ -22,5 +22,8 @@
     "secretlint": "^13.1.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1"
+  },
+  "dependencies": {
+    "@the-convocation/twitter-scraper": "0.22.3"
   }
 }
