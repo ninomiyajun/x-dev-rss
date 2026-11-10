@@ -1,5 +1,5 @@
 <!-- harness-copy: source=home/agents/skills/project-harness-init/assets/harness/checks-d-readme.md -->
-<!-- harness-copy: version=rules-2026.11.08-1 -->
+<!-- harness-copy: version=rules-2026.11.10-1 -->
 <!-- harness-copy: sha256=41a9f792c856bca10b426f335a2240c5aef58a889722fad559bddd5803f742e4 -->
 <!-- harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える -->
 # 追加の検査の口（`scripts/harness/checks.d/`）

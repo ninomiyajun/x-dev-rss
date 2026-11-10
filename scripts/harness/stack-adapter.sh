@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/parts/node-harness/assets/stack-adapter.sh
-# harness-copy: version=rules-2026.11.08-1
+# harness-copy: version=rules-2026.11.10-1
 # harness-copy: sha256=80f773ce0c533bf6dbf9b8faeadc79fbc28c548683e789a042f8ccd2d61662ca
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 段の読み取りの部品（node のプロジェクト）。ハーネスの検査の本体（scripts/harness/drift-scan.sh）が、技術ごとの違いを

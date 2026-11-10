@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/check-docs.sh
-# harness-copy: version=rules-2026.11.08-1
-# harness-copy: sha256=db810fd6219f0e30259d03e5c6070f35fa68f04407499207f3d8c008c9c99fea
+# harness-copy: version=rules-2026.11.10-1
+# harness-copy: sha256=9aba183473287daae62a0771d660bc3c7d7bc72f0f62e3f56b646190dd11c4a4
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 文書の検査（ハーネスの検査の本体）。どのプロジェクトでも同じ中身の写しを scripts/harness/check-docs.sh に置く。
 # プロジェクトごとの値は、同じ置き場の設定のファイル harness.conf と、プロジェクトの文書から読む。プロジェクト専用の
@@ -362,9 +362,9 @@ if [ -n "$version" ]; then
       [ -z "$path" ] && continue
       case "$path" in
         */) [ -d "$path" ] || fail "必須のディレクトリ $path がありません（ハーネスの版 ${version}）" \
-              "$path を作る（空なら .gitkeep を置く）。不要になったのなら、版を上げて scripts/harness/harness.conf の required.<版> の行を直す" ;;
+              "$path を作る（空なら .gitkeep を置く）。不要になったのなら、scripts/harness/harness.conf の required.<版> の行を「# 外した: <パス>（<理由>）」の注釈の行にする（検査の本体の写しは外せない）" ;;
         *) [ -f "$path" ] || fail "必須のファイル $path がありません（ハーネスの版 ${version}）" \
-              "$path を戻す。不要になったのなら、版を上げて scripts/harness/harness.conf の required.<版> の行を直す" ;;
+              "$path を戻す。不要になったのなら、scripts/harness/harness.conf の required.<版> の行を「# 外した: <パス>（<理由>）」の注釈の行にする（検査の本体の写しは外せない）" ;;
       esac
     done <<EOF
 $required

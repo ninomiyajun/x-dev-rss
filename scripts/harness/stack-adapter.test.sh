@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/parts/node-harness/assets/stack-adapter.test.sh
-# harness-copy: version=rules-2026.11.08-1
+# harness-copy: version=rules-2026.11.10-1
 # harness-copy: sha256=27e3fdcbf281b7dd1d7936d5857a481283fb860a600905569571c85d977c8b00
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 段の読み取りの部品（stack-adapter.sh）の試験。部品 node-harness の写しで、手で変えない。

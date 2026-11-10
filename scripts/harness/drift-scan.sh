@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/drift-scan.sh
-# harness-copy: version=rules-2026.11.08-1
+# harness-copy: version=rules-2026.11.10-1
 # harness-copy: sha256=18d41ec4cd6f5d3c63f5bc87a48496df15f2f0b1f0df14cc5aeef007c2c8e9e6
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 定期の走査（drift-scan）。文書とコードのずれの材料を集めて、報告 report.md を 1 つだけ書く。ハーネスの検査の本体の写しで、

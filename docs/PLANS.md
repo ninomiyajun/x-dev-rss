@@ -69,7 +69,7 @@
 5. `## 進捗`: 先頭に状態の表を置き、その下に、終えたことと日時の出来事の行を書く。状態の表の必須の仕様は、次の区画のとおりである。
 
 <!-- plan-status-spec:begin -->
-<!-- harness-copy: region=plan-status-spec source=home/agents/skills/project-harness-init/assets/plans.md version=rules-2026.11.08-1 sha256=5a15c78e2b11de3d87beedccc91ccf1b7deee8494339810a8d0ec55e2c823863 -->
+<!-- harness-copy: region=plan-status-spec source=home/agents/skills/project-harness-init/assets/plans.md version=rules-2026.11.10-1 sha256=5a15c78e2b11de3d87beedccc91ccf1b7deee8494339810a8d0ec55e2c823863 -->
 - 進捗の節の先頭に、小見出し `### 状態の表` と、列が「項目」「状態」「根拠」の表を置く。
 - 項目: 検証の節のすべての基準と、手順の節の番号つきの手順のすべてを 1 行ずつ置く。基準は、`### <識別子>` の
   見出しか、1 列目の見出しが「番号」か「識別子」の表の 1 列目で示す。手順は `手順 <番号>` と書く。
@@ -119,7 +119,7 @@ API に換算した費用の上限を計画に書き、途中で見張る作業�
 費用を数える道具は利用者単位の `~/.claude/scripts/session-cost.py` で、仕様は次の区画のとおりである。
 
 <!-- plan-cost-spec:begin -->
-<!-- harness-copy: region=plan-cost-spec source=home/agents/skills/project-harness-init/assets/plans.md version=rules-2026.11.08-1 sha256=1958f797dd3c3c3e20b9d13253a73811fea15d4133d3aa14604d16a3f2a6ec2f -->
+<!-- harness-copy: region=plan-cost-spec source=home/agents/skills/project-harness-init/assets/plans.md version=rules-2026.11.10-1 sha256=1958f797dd3c3c3e20b9d13253a73811fea15d4133d3aa14604d16a3f2a6ec2f -->
 - 費用の上限を見張る計画は、費用の節（どの節の中でもよい）に、列が「項目」「会話」「数え始め」「計画の上限」の表（列の順は
   問わない）と、同じ `## ` の節の中に 1 行の `台帳: <台帳のパス>` を置く。台帳のパスは `~/` で始めるか、計画のファイルの
   ディレクトリを基準にした相対のパスで書く（`~` で始まらない相対のパスは、計画のファイルのディレクトリを基準に解決する）。

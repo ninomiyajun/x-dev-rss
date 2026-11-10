@@ -1,10 +1,11 @@
 #!/bin/bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/notify.sh
-# harness-copy: version=rules-2026.11.08-1
-# harness-copy: sha256=d46b3064c35ccf9563c248ec8c377c3236126c4434b38f8aff97565b642c69fa
+# harness-copy: version=rules-2026.11.10-1
+# harness-copy: sha256=65de6439fc93e2eb5c57419be08a6a367267da0e75add50482f8a1b9e9a70640
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 早期通知。Claude Code の Edit・Write と、Codex の apply_patch がファイルを書いた直後に、フックから呼ばれる
-# （.claude/settings.json と .codex/hooks.json）。書いたファイルのある作業ツリーの文書の検査（check-docs.sh）を動かし、
+# （.claude/settings.json と .codex/hooks.json。どちらも、起動の部品 notify-launch.sh で scripts/harness/ の下が HEAD と
+# 同じかを確かめてから、このファイルを動かす）。書いたファイルのある作業ツリーの文書の検査（check-docs.sh）を動かし、
 # 不合格をエージェントに知らせる。知らせるだけで、作業は止めない（止めるのは文書の検査のコマンドと CI）。
 # ハーネスの検査の本体の写しで、どのプロジェクトでも同じ中身を置く。
 #
@@ -37,7 +38,8 @@
 #
 # 時間の上限は、全体で TIME_LIMIT 秒（フックの設定の timeout の 20 秒より短くする。設定の側が先に働くと、知らせを返せない）。
 # 入力の変換、パスの判定の中の git の呼び出し、検査のどれも、残りの秒数を上限にして動かす（run_limited）。
-# 環境変数 HARNESS_NOTIFY_TIME_LIMIT（1〜18 の整数。試験用）で短くできる。
+# 環境変数 HARNESS_NOTIFY_TIME_LIMIT（1〜18 の整数）で短くできる。起動の部品（notify-launch.sh）が、起動の前の確かめに使った
+# 秒数を引いた残りを渡す。試験でも使う。
 #
 # 書き込み: リポジトリの中には何も書かない（一時ファイルは、mktemp の一時ディレクトリに置いて消す）。
 # 環境変数 HARNESS_NOTIFY_LOG があるときだけ、そのファイルに 1 行を足す（確認用。普段は設定しない）。行の項目は、時刻、
