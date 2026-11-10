@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // harness-copy: source=home/agents/skills/project-harness-init/assets/parts/node-secrets/assets/check-secrets.mjs
-// harness-copy: version=rules-2026.11.08-1
-// harness-copy: sha256=d9e553d8e8f129c853c333e65bd4dae912539cd613a70edbb13c93bf014e4d71
+// harness-copy: version=rules-2026.11.10-1
+// harness-copy: sha256=9212d9bed906a18c3cbd9de974607cce6e7b901ce5b1af2e190cfdbd00de53c4
 // harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 // 秘匿値の検査の本体。入口は scripts/harness/check-secrets.sh（作業ツリーは引数なし、push する範囲は --commits）。
 // CI はこのファイルを node で直接呼ぶ（npm の pre と post のスクリプトを動かさないため）。
@@ -25,10 +25,16 @@
 //   - 秘匿値が見つかったファイル、コミットメッセージ、タグの注釈
 //   - NUL バイトか secretlint の無効化のコメントを含むコミットメッセージとタグの注釈
 //   - 作業ツリーと --file の検査で、secretlint の既定の対象外の名前のファイルの写しが、secretlint の結果に出なかったとき
+//   - バイナリのファイルから取り出した文字列の写しが、secretlint の結果に出なかったか、文字のファイルとして調べられなかったとき
 // secretlint が既定で対象外にするファイル（.secretlintrc.* など）は、この中の単純な内容検査（SIMPLE_PATTERNS）で調べ、
 // 加えて、リポジトリの外の一時ディレクトリへ写した中身を secretlint にも掛ける（cwd の外では既定の対象外が効かないため）。
 // 文字のファイルでないファイルも、単純な内容検査で調べる。既知のバイナリの拡張子のファイルは、UTF-16LE と UTF-16BE で
 // 読んだ中身も同じ検査に掛ける。コミットメッセージとタグの注釈は、secretlint と単純な内容検査の両方に掛ける。
+// バイナリのファイル（既知のバイナリの拡張子のファイルと、secretlint がバイナリと報告したファイル）は、secretlint の規則の
+// 多くが文字のファイルしか調べず、プロジェクトが .secretlintrc.json に足した規則（pattern の規則）も掛からない。そこで、
+// 中身から文字列を読みごとに取り出して一時ディレクトリの extracted/<通し番号>-<読みの番号>.txt に書き、その写しを secretlint の全規則に掛ける
+// （extractStrings。所見は元のファイルの札で出す）。限界: UTF-32 で書かれた値、圧縮された中身（PNG の圧縮した文字の塊、画像の
+// 本体、zip の中身など）、画像に写った文字は見つけられない。
 // 失敗の一覧には、どのコミットかタグかの札だけを出し、見つかった値は出さない（値を伏せた表示は secretlint に任せる）。
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -47,6 +53,10 @@ const DISABLE_MARK = Buffer.from("secretlint" + "-disable");
 // secretlint の 1 回の起動に渡すファイルの上限（引数の長さの上限を超えないため）
 const SECRETLINT_CHUNK_FILES = 200;
 const SECRETLINT_CHUNK_BYTES = 64 * 1024;
+// バイナリから取り出した文字列の写しは、1 つのファイルから読みごとに最大 5 つでき、パスが短いので、1 回の起動に多く渡す
+// （起動の回数を増やさず、所要時間を抑えるため。引数の長さは、下の上限でも OS の上限より十分に小さい）
+const EXTRACTED_CHUNK_FILES = 2000;
+const EXTRACTED_CHUNK_BYTES = 256 * 1024;
 // git cat-file --batch の 1 回の起動で取り出す数
 const CAT_FILE_CHUNK = 1000;
 
@@ -113,6 +123,10 @@ const catBatch = async (shas, onObject) => {
 
 const problems = {
   unreadable: [], symlinks: [], nulFiles: [], nulTexts: [], ignoreFiles: [], disableComments: [], disableTexts: [], unscannedCopies: [],
+  unscannedExtracted: [],
+};
+const pushOnce = (list, x) => {
+  if (!list.includes(x)) list.push(x);
 };
 
 // 中身に NUL バイトを含んでよい、既知のバイナリの拡張子（今のリポジトリにあるものと、よくある画像とフォント）。
@@ -247,14 +261,40 @@ const simpleScan = (entry) => {
   return [...new Set(views.flatMap(simpleScanText))];
 };
 
+// バイナリのファイルの中身から、文字列を取り出す。latin1 で読んだ中身と、UTF-16LE・UTF-16BE で偶数と奇数の位置から読んだ
+// 4 つの中身のそれぞれで、印字可能な ASCII（0x20-0x7E とタブ）以外の文字の連なりを 1 つの改行に置き換える。短い並びも
+// 捨てない（名前と値が別の行に分かれても、改行は正規表現の空白に当たるので、名前と値をまたぐ規則が働く）。上限で途中を
+// 切り捨てることはしない。読みごとに別の文字列として返す（1 つにつながないのは、大きなバイナリで文字列の長さの上限に
+// 当たらないため）。印字可能な文字が 1 つも無い読みは返さない。返り値は [読みの番号（1〜5）, 文字列] の並び。
+const NON_PRINTABLE_RUNS = /[^\t\x20-\x7e]+/g;
+const HAS_PRINTABLE = /[\t\x20-\x7e]/;
+const extractStrings = (buf) => {
+  const readers = [() => buf.toString("latin1")];
+  for (const start of [0, 1]) {
+    const part = () => Buffer.from(buf.subarray(start, start + ((buf.length - start) & ~1)));
+    readers.push(() => part().toString("utf16le"));
+    readers.push(() => part().swap16().toString("utf16le"));
+  }
+  const out = [];
+  readers.forEach((read, i) => {
+    const v = read();
+    if (HAS_PRINTABLE.test(v)) out.push([i + 1, v.replace(NON_PRINTABLE_RUNS, "\n")]);
+  });
+  return out;
+};
+// 取り出した文字列の中の secretlint の無効化のコメントの目印を、働かない形に替える（取り出した文字列に無効化のコメントが
+// あっても、所見を消させないため。目印があったことは、元のファイルの無効化のコメントとして別に失敗にする）
+const DISABLE_MARK_RE = new RegExp(DISABLE_MARK.toString("latin1"), "g");
+const neutralizeDisable = (text) => text.replace(DISABLE_MARK_RE, "secretlint_disable_neutralized");
+
 // ファイルを、引数の長さの上限を超えない組に分ける
-const chunkFiles = (files) => {
+const chunkFiles = (files, maxFiles = SECRETLINT_CHUNK_FILES, maxBytes = SECRETLINT_CHUNK_BYTES) => {
   const chunks = [];
   let cur = [];
   let bytes = 0;
   for (const f of files) {
     const len = Buffer.byteLength(f) + 1;
-    if (cur.length > 0 && (cur.length >= SECRETLINT_CHUNK_FILES || bytes + len > SECRETLINT_CHUNK_BYTES)) {
+    if (cur.length > 0 && (cur.length >= maxFiles || bytes + len > maxBytes)) {
       chunks.push(cur);
       cur = [];
       bytes = 0;
@@ -339,40 +379,84 @@ const main = async () => {
     }
     const excludedCount = forSimple.length; // secretlint の既定の対象外で、写しを secretlint にも掛けたファイル
     const simpleSet = new Set(forSimple);
-    const byAbs = new Map(forSecretlint.map((e) => [e.abs, e]));
     const findings = [];
     let checkedBySecretlint = 0;
 
     const common = ["--secretlintrc", CONFIG, "--secretlintignore", UNUSED_IGNORE_NAME, "--no-gitignore", "--no-glob"];
     const seenAbs = new Set();
     const withFindings = [];
-    for (const files of chunkFiles(forSecretlint.map((e) => e.abs))) {
-      await yieldForSignals();
-      const report = path.join(tmp, "report.json");
-      const r = spawnSync(SECRETLINT, [...common, "--format", "json", "--output", report, "--", ...files], {
-        cwd: ROOT,
-        stdio: ["ignore", "inherit", "inherit"],
-      });
-      await yieldForSignals(); // 子のプロセスが SIGINT で止まった場合は、ここで止める
-      if (r.status !== 0 || !fs.existsSync(report)) die(`secretlint が異常終了しました（終了コード ${r.status}）`);
-      const results = JSON.parse(fs.readFileSync(report, "utf8"));
-      fs.rmSync(report);
-      for (const res of results) {
-        const e = byAbs.get(path.resolve(res.filePath));
-        if (!e) continue;
-        seenAbs.add(e.abs);
-        if (res.messages.length > 0) withFindings.push(e);
-        checkedBySecretlint += 1;
-        // 単純な内容検査に足すのは元の要素（写しの元がすでに入っていれば足さず、同じ札の所見を 2 回出さない）
-        const orig = e.src ?? e;
-        if (res.sourceContentType === "binary" && !simpleSet.has(orig)) {
+    // ファイルの組を secretlint に JSON の報告で掛け、結果ごとに onResult(要素, 結果) を呼ぶ
+    const runSecretlint = async (list, onResult, limits = []) => {
+      const byPath = new Map(list.map((e) => [e.abs, e]));
+      for (const files of chunkFiles(list.map((e) => e.abs), ...limits)) {
+        await yieldForSignals();
+        const report = path.join(tmp, "report.json");
+        const r = spawnSync(SECRETLINT, [...common, "--format", "json", "--output", report, "--", ...files], {
+          cwd: ROOT,
+          stdio: ["ignore", "inherit", "inherit"],
+        });
+        await yieldForSignals(); // 子のプロセスが SIGINT で止まった場合は、ここで止める
+        if (r.status !== 0 || !fs.existsSync(report)) die(`secretlint が異常終了しました（終了コード ${r.status}）`);
+        const results = JSON.parse(fs.readFileSync(report, "utf8"));
+        fs.rmSync(report);
+        for (const res of results) {
+          const e = byPath.get(path.resolve(res.filePath));
+          if (e) onResult(e, res);
+        }
+      }
+    };
+    const reportedBinary = new Set(); // secretlint がバイナリと報告した元の要素
+    await runSecretlint(forSecretlint, (e, res) => {
+      seenAbs.add(e.abs);
+      if (res.messages.length > 0) withFindings.push(e);
+      checkedBySecretlint += 1;
+      // 単純な内容検査に足すのは元の要素（写しの元がすでに入っていれば足さず、同じ札の所見を 2 回出さない）
+      const orig = e.src ?? e;
+      if (res.sourceContentType === "binary") {
+        reportedBinary.add(orig);
+        if (!simpleSet.has(orig)) {
           simpleSet.add(orig);
           forSimple.push(orig); // secretlint の規則の多くは文字のファイルだけを調べるため
         }
       }
-    }
+    });
     for (const e of forSecretlint) {
       if (!seenAbs.has(e.abs)) (e.src ? problems.unscannedCopies : problems.unreadable).push(e.label);
+    }
+
+    // バイナリのファイル（既知のバイナリの拡張子のものと、secretlint がバイナリと報告したもの）から文字列を取り出し、
+    // 読みごとに一時ディレクトリの extracted/<通し番号>-<読みの番号>.txt に書いて、secretlint の全規則（推奨の一式と、
+    // プロジェクトが足した pattern の規則）に掛ける。写しの名前に元の拡張子を残さない（secretlint が文字のファイルとして
+    // 読むため）。取り出した文字列の無い読みは写しを作らない。写しの要素は
+    // { abs: 写しのパス, rel, label: 元の札, src: 元の要素, extracted: true }。所見は元の札で 1 回だけ出す。
+    // 取り出した文字列に無効化のコメントの目印があれば、元の札で無効化のコメントとして失敗にし、写しでは目印を働かない形に替える
+    const extracted = [];
+    const extractedOrigs = new Set();
+    for (const e of forSecretlint) {
+      const orig = e.src ?? e;
+      if (extractedOrigs.has(orig) || !(isKnownBinary(orig.rel) || reportedBinary.has(orig))) continue;
+      extractedOrigs.add(orig);
+      const n = extractedOrigs.size;
+      for (const [view, text] of extractStrings(fs.readFileSync(orig.abs))) {
+        if (text.includes(DISABLE_MARK.toString("latin1"))) pushOnce(orig.isText ? problems.disableTexts : problems.disableComments, orig.label);
+        const abs = path.join(tmp, "extracted", `${n}-${view}.txt`);
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, neutralizeDisable(text), "latin1");
+        extracted.push({ abs, rel: orig.rel, label: orig.label, src: orig, extracted: true });
+      }
+    }
+    const seenExtracted = new Set();
+    const extractedFindingOrigs = new Set();
+    await runSecretlint(extracted, (e, res) => {
+      seenExtracted.add(e.abs);
+      if (res.sourceContentType !== "text") pushOnce(problems.unscannedExtracted, e.label);
+      else if (res.messages.length > 0) {
+        withFindings.push(e);
+        extractedFindingOrigs.add(e.src);
+      }
+    }, [EXTRACTED_CHUNK_FILES, EXTRACTED_CHUNK_BYTES]);
+    for (const e of extracted) {
+      if (!seenExtracted.has(e.abs)) pushOnce(problems.unscannedExtracted, e.label);
     }
     // 既知のバイナリの拡張子のファイルは、secretlint が文字のファイルと見なしても単純な内容検査に掛ける（UTF-16 の中身のため）
     for (const e of forSecretlint) {
@@ -393,13 +477,16 @@ const main = async () => {
     // 見つかった値を伏せた形で表示する（secretlint の既定の maskSecrets）。コミットの検査では、表示に出る一時ファイルの
     // パスが、どのコミットのファイルか、どのコミットメッセージかタグの注釈かを先に出す。作業ツリーと --file の検査でも、
     // 写しを表示に渡すファイルは、写しのパスがどのファイルかを先に出す
+    const EXTRACTED_NOTE = "バイナリから取り出した文字列";
     for (const e of withFindings) {
-      if (commitMode || e.src) console.error(`check-secrets: 次の表示の ${e.abs} は ${e.label}`);
+      if (commitMode || e.src) console.error(`check-secrets: 次の表示の ${e.abs} は ${e.label}${e.extracted ? `（${EXTRACTED_NOTE}）` : ""}`);
     }
     for (const files of chunkFiles(withFindings.map((e) => e.abs))) {
       spawnSync(SECRETLINT, [...common, "--", ...files], { cwd: ROOT, stdio: "inherit" });
     }
-    for (const e of withFindings) findings.push(`${e.label}（secretlint）`);
+    for (const e of withFindings) if (!e.extracted) findings.push(`${e.label}（secretlint）`);
+    // 取り出した文字列の所見は、読みの写しがいくつ当たっても、元の札で 1 回だけ出す
+    for (const orig of extractedFindingOrigs) findings.push(`${orig.label}（secretlint: ${EXTRACTED_NOTE}）`);
     for (const e of forSimple) {
       for (const name of simpleScan(e)) findings.push(`${e.label}（単純な内容検査: ${name}）`);
     }
@@ -408,7 +495,8 @@ const main = async () => {
       `secretlint で ${checkedBySecretlint} 件、単純な内容検査で ${forSimple.length} 件` +
       `（うち secretlint の既定の対象外で、写しを secretlint にも掛けた ${excludedCount} 件、` +
       `ほかに secretlint でも調べた ${forSimple.length - excludedCount} 件）` +
-      `を調べました${note ? `。${note}` : ""}`;
+      `を調べました。バイナリのファイル ${extractedOrigs.size} 件から取り出した文字列（写し ${extracted.length} 件）も secretlint で調べました` +
+      `${note ? `。${note}` : ""}`;
     console.log(`check-secrets: ${commitMode ? "コミットの中身" : fileMode ? "ファイル" : "作業ツリー"}: ${summary}`);
 
     let failed = false;
@@ -424,6 +512,11 @@ const main = async () => {
       problems.unscannedCopies,
       "secretlint が既定の対象外として調べなかった写し",
       "secretlint の版が既定の対象外の扱いを変えた可能性がある。check-secrets.mjs の写しの方式を見直す（TMPDIR がリポジトリの中にあるときも起きる）",
+    );
+    report(
+      problems.unscannedExtracted,
+      "バイナリのファイルから取り出した文字列を、secretlint が文字のファイルとして調べなかったもの",
+      "secretlint の版が、文字のファイルの見分け方か結果の形を変えた可能性がある。check-secrets.mjs の取り出しの方式を見直す（TMPDIR がリポジトリの中にあるときも起きる）",
     );
     report(problems.symlinks, "シンボリックリンク", "シンボリックリンクをやめ、実体のファイルを置く（リンク先の中身は検査と食い違うため）");
     report(
