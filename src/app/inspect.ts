@@ -1,5 +1,6 @@
 // 試し取得（--dry-run。計画の手順 6・V1）。取得だけを行い、投稿も記録の読み書きもしない。
-import { CONFIG_UNREADABLE, fetchFailureLine, formatJst } from "../domain/message.ts";
+// --show-text のときだけ、各ポストの行の次に本文の行を出す（D17）。
+import { CONFIG_UNREADABLE, fetchFailureLine, formatJst, showTextLine } from "../domain/message.ts";
 import { classifyAll, postedAtOf } from "../domain/post.ts";
 import type { PostKind } from "../domain/post.ts";
 import { rankCounted } from "../domain/select.ts";
@@ -13,6 +14,8 @@ export type InspectDeps = {
   config: ConfigPort;
   makeFetcher(bundle: SecretBundle): FetchPort;
   out: Output;
+  /** 各ポストの本文の行も出すか（--show-text。D17）。既定は出さない。 */
+  showText?: boolean;
 };
 
 const KIND_TEXT: Record<PostKind, string> = {
@@ -60,6 +63,7 @@ export function inspect(deps: InspectDeps): Promise<number> {
             `順位=${rank === undefined ? "-" : String(rank)}`,
           ].join(" "),
         );
+        if (deps.showText === true) deps.out(showTextLine(c.facts.text));
       }
       deps.out(STOP_TEXT[result.stop]);
       deps.out(`X への要求の回数: ${result.requests}`);
