@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/check-docs.test.sh
-# harness-copy: version=rules-2026.11.10-1
-# harness-copy: sha256=4fb84b424c8e7664145c41f53d907b3a7dc825a736b2a92b7b7101f934bc24e6
+# harness-copy: version=rules-2026.11.12-1
+# harness-copy: sha256=c8b0645946ca074b7a9d1a1c3c9ef03112ac78a631f66dc9a6b23de90fdc3ba7
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
-# check-docs.sh の試験（検査 8〜13、設定のファイル、追加の検査の口）。ハーネスの検査の本体の写しで、どのプロジェクトでも
+# check-docs.sh の試験（検査 8〜14、設定のファイル、追加の検査の口）。ハーネスの検査の本体の写しで、どのプロジェクトでも
 # 同じ中身を置く。手元で使うコマンドは下の TEST_COMMAND（CI はこのスクリプトを bash で直接呼ぶ）。最後に、このファイルの
 # 置き場の checks.d/ の *.test.sh（プロジェクト専用の検査の試験）を順に流し、1 つでも失敗すれば、この試験を失敗にする。
 #
-# 場合ごとに、一時ディレクトリに小さなリポジトリ（git init だけ。検査 12 の場合だけコミットする）を作り、check-docs.sh と
+# 場合ごとに、一時ディレクトリに小さなリポジトリ（git init だけ。検査 12 と検査 14 の分岐元との比べの場合だけコミットする）を作り、check-docs.sh と
 # harness.conf の写しと、本物の docs/PLANS.md の写し（製品の仕様の置き場があるときは、本物の docs/product-specs/README.md の
 # 写しも）を置いて、計画・記録・仕様の組を変えて動かす。終了コードと、失敗のときは理由の文言を確かめる。
 # 検査は、基準の日（HARNESS_TODAY）を決まった日にし、分岐元の環境変数（GITHUB_BASE_REF、HARNESS_BASE_REF）を外して動かす。
@@ -210,6 +210,27 @@ run_case() {
     passed=$((passed + 1))
   else
     echo "NG: ${name}（期待: ${expect}、終了コード: ${rc}）" >&2
+    printf '%s\n' "$out" | sed 's/^/    /' >&2
+    failed=$((failed + 1))
+  fi
+}
+
+# 出力に $2 の文言が無いことだけを確かめる（ほかの検査の結果は問わない）。$1 = 名前、$3 = 準備の関数
+run_case_without() {
+  local name="$1" absent="$2" setup="$3" d out
+  d="$TMP_ROOT/case-$((passed + failed + 1))"
+  make_base "$d"
+  "$setup" "$d"
+  set +e
+  out="$(env -u GITHUB_BASE_REF -u HARNESS_BASE_REF ${CASE_ENV[@]+"${CASE_ENV[@]}"} HARNESS_TODAY="${CASE_TODAY:-$BASE_TODAY}" \
+    bash "$d/scripts/harness/check-docs.sh" 2>&1)"
+  set -e
+  CASE_ENV=()
+  if ! grep -qF -- "$absent" <<<"$out"; then
+    echo "ok: ${name}（出ない: ${absent}）"
+    passed=$((passed + 1))
+  else
+    echo "NG: ${name}（出てはいけない文言が出た: ${absent}）" >&2
     printf '%s\n' "$out" | sed 's/^/    /' >&2
     failed=$((failed + 1))
   fi
@@ -973,6 +994,19 @@ run_case "設定: 採用した部品の行（part）は何行でも書ける" pa
 run_case "設定: 部品の名前の形の誤り" fail "part の値「../x」が部品の名前" setup_conf_bad_part
 run_case "設定: - で始まる既定のブランチ" fail "default_branch の値「-main」に使えない文字があります" setup_conf_dash_branch
 
+# --- 検査 4: Markdown のリンク ---
+
+setup_link_second_broken() { printf '[a](../AGENTS.md) [b](no-such.md)\n' > "$1/docs/links.md"; }
+# NUL を含む Markdown の後ろ（名前の順）に、リンク切れの Markdown と、もう 1 つの Markdown を置く。リンクの抜き出しの結果と
+# 一覧の項目の対応がずれると、リンク切れのファイルが後ろのファイルの結果を読み、リンク切れを見落とす
+setup_link_after_nul() {
+  printf 'a\0b\n' > "$1/docs/links-a-nul.md"
+  printf '[b](no-such-b.md)\n' > "$1/docs/links-b-broken.md"
+  printf '[c](links-b-broken.md)\n' > "$1/docs/links-c-ok.md"
+}
+run_case "リンク: 1 行の 2 つ目のリンク先が無い" fail "docs/links.md のリンク先 no-such.md がありません" setup_link_second_broken
+run_case "リンク: NUL を含む Markdown の後ろのファイルのリンク先が無い" fail "docs/links-b-broken.md のリンク先 no-such-b.md がありません" setup_link_after_nul
+
 # --- 検査 12: 検査の由来の記録 ---
 
 tgit() {
@@ -1064,6 +1098,221 @@ run_case "写し: 冒頭の行の sha256 と中身が合う" pass "" setup_copy_
 run_case "写し: 中身を手で変えた" fail "写し scripts/harness/x-copy.sh の中身が合いません" setup_copy_edited
 run_case_if "$REGION_PRESENT" "写し: docs/PLANS.md の区画を手で変えた" fail "写し docs/PLANS.md の区画 plan-status-spec の中身が合いません" setup_region_edited
 
+# --- 検査 14: 製品の機能の一覧 ---
+# 製品の前提の見本は、区画（印と短い本文）と「### 一覧」の表だけを持つ。書式の正本の区画の文面は、利用者単位の規約の
+# リポジトリの試験（読み取りの道具と同じ例の文書）で確かめる
+RM_HEAD='| 識別子 | 機能 | 状態 | 達成の条件 | 根拠 |
+|---|---|---|---|---|'
+RM_F1='| F-1 | 一覧の文字を大きくする | 残り | 基準: LATER-1; 環境: 手元のブラウザ | 利用者の決定: 見本の会話 |'
+RM_F2='| F-2 | 毎日の自動実行 | 残り | 基準: -; 環境: 日次の起動; 確かめること: 手で実行せずに届いた | 利用者の決定: 見本の会話 |'
+RM_DONE='| F-1 | 一覧の文字を大きくする | 済 | 基準: LATER-1; 環境: 手元のブラウザ | docs/exec-plans/completed/'"$OLD"'.md |'
+# 地図に製品の前提の行を足す
+map_roadmap() { printf '| 製品の前提 | `docs/PRODUCT_SENSE.md` |\n' >> "$1/AGENTS.md"; }
+# 製品の前提を書く。$1 = リポジトリ、$2 = 表の行（空なら行なし）、$3 = old なら区画も表も置かない（旧い形）
+write_roadmap() {
+  {
+    printf '%s\n' "# 製品の前提" "" "## 目的" "" "見本。" ""
+    if [ "${3:-}" != old ]; then
+      printf '%s\n' "<!-- roadmap-spec:begin -->" "## 機能の一覧" "" "書式の見本。" "<!-- roadmap-spec:end -->" "" "### 一覧" "" "$RM_HEAD"
+      [ -z "$2" ] || printf '%s\n' "$2"
+    fi
+  } > "$1/docs/PRODUCT_SENSE.md"
+  # 達成の条件に並べた基準 LATER-1・LATER-2 が仕様に実在するように、仕様 later.md を置く（RM_NO_SPEC=1 なら置かない）
+  if [ -z "${RM_NO_SPEC:-}" ] && [ ! -f "$1/$SP/later.md" ]; then put_spec_with "$1" "見本の目的。"; fi
+}
+put_roadmap() { map_roadmap "$1"; write_roadmap "$1" "$2" "${3:-}"; }
+# 旧い書式の完了した計画（検査 9 と検査 10 の (6)(7) の対象外）に、基準 LATER-1 の状態の表を置く。$2 = 状態、$3 = 根拠、
+# $4 = 確かめ方
+old_plan_with_status() {
+  write_plan "$1/$C/$OLD.md" "### LATER-1 文字の大きさ
+
+- 確かめ方: ${4:-自動テスト}" "" "### 状態の表
+
+| 項目 | 状態 | 根拠 |
+|---|---|---|
+| LATER-1 | $2 | $3 |"
+}
+# 仕様の置き場が無ければ、最小の書式の文書を置く。仕様 later.md（略号 LATER、approved）を、目的の節に $2 の行を持たせて足す
+put_spec_with() {
+  local d="$1" h
+  if [ ! -f "$d/$SP/README.md" ]; then
+    mkdir -p "$d/$SP"
+    printf '%s\n' "# 製品の仕様" "" "## 必須の節" "" '1. `## 目的`: 見本。' '2. `## 受け入れ基準`: 見本。' "" "## 目録" "" \
+      "| 略号 | 仕様 | 題 | 状態 |" "|---|---|---|---|" > "$d/$SP/README.md"
+  fi
+  {
+    printf '# 見本の仕様\n\n'
+    required_headings "$d/$SP/README.md" | while IFS= read -r h; do
+      printf '%s\n\n' "$h"
+      case "$h" in
+        "## 目的") printf '%s\n\n' "$2" ;;
+        "## 受け入れ基準") printf '%s\n' "### LATER-1 文字の大きさ" "" "- 前提: 見本。" "- 操作: 見本。" "- 期待する結果: 見本。" "" \
+          "### LATER-2 文字の色" "" "- 前提: 見本。" "- 操作: 見本。" "- 期待する結果: 見本。" "" ;;
+        *) printf 'なし\n\n' ;;
+      esac
+    done
+  } > "$d/$SP/later.md"
+  # 目録の行は 1 度だけ足す（同じ場合の中で仕様を書き直しても、略号を重ねない）
+  grep -qF '| LATER | [later.md](later.md) |' "$d/$SP/README.md" || printf '| LATER | [later.md](later.md) | 見本 | approved |\n' >> "$d/$SP/README.md"
+}
+setup_rm_ok() { put_roadmap "$1" "$RM_F1
+$RM_F2"; }
+setup_rm_empty_region() { map_roadmap "$1"; write_roadmap "$1" ""; }
+setup_rm_dup() { put_roadmap "$1" "$RM_F1
+$RM_F1"; }
+setup_rm_bad_state() { put_roadmap "$1" '| F-1 | 一覧の文字を大きくする | 作業中 | 基準: LATER-1; 環境: 手元 | 見本 |'; }
+setup_rm_bad_cond() { put_roadmap "$1" '| F-1 | 一覧の文字を大きくする | 残り | 毎日動くこと | 見本 |'; }
+setup_rm_bad_cols() { put_roadmap "$1" '| F-1 | 一覧の文字を大きくする | 残り | 基準: LATER-1; 環境: 手元 |'; }
+setup_rm_done_ok() { put_roadmap "$1" "$RM_DONE"; old_plan_with_status "$1" 済 "2030-01-15 試験"; put_spec_with "$1" "見本の目的。"; }
+setup_rm_done_spec_missing() { RM_NO_SPEC=1 put_roadmap "$1" "$RM_DONE"; old_plan_with_status "$1" 済 "2030-01-15 試験"; }
+setup_rm_left_spec_missing() { put_roadmap "$1" '| F-1 | 一覧の文字を大きくする | 残り | 基準: LATER-9; 環境: 手元 | 利用者の決定: 見本の会話 |'; }
+setup_rm_done_kid_empty() { put_roadmap "$1" "$RM_DONE"; put_spec_with "$1" "見本の目的。"; old_plan_with_kids "$1" '| LATER-1 (1) | 済 | 2030-01-15 試験 |
+| LATER-1 (2) |  |  |'; }
+setup_rm_done_failed() { put_roadmap "$1" "$RM_DONE"; old_plan_with_status "$1" 不合格 "届かなかった。持ち越し: F-1"; put_spec_with "$1" "見本の目的。"; }
+# 基準 LATER-1 に子項目 (1) (2) を宣言した完了した計画。$2 = 状態の表の行
+old_plan_with_kids() {
+  write_plan "$1/$C/$OLD.md" "### LATER-1 文字の大きさ
+
+- 子項目: LATER-1 = (1) (2)
+- 確かめ方: 自動テスト" "" "### 状態の表
+
+| 項目 | 状態 | 根拠 |
+|---|---|---|
+$2"
+}
+setup_rm_done_kid_missing() { put_roadmap "$1" "$RM_DONE"; put_spec_with "$1" "見本の目的。"; old_plan_with_kids "$1" '| LATER-1 (1) | 済 | 2030-01-15 試験 |'; }
+setup_rm_done_kids_ok() { put_roadmap "$1" "$RM_DONE"; put_spec_with "$1" "見本の目的。"; old_plan_with_kids "$1" '| LATER-1 (1) | 済 | 2030-01-15 試験 |
+| LATER-1 (2) | 済 | 2030-01-15 試験 |'; }
+setup_rm_done_kid_open() { put_roadmap "$1" "$RM_DONE"; put_spec_with "$1" "見本の目的。"; old_plan_with_kids "$1" '| LATER-1 (1) | 済 | 2030-01-15 試験 |
+| LATER-1 (2) | 未 | - |'; }
+setup_rm_done_no_plan() { put_roadmap "$1" '| F-1 | 一覧の文字を大きくする | 済 | 基準: LATER-1; 環境: 手元 | マージした |'; }
+setup_rm_done_human_nodate() { put_roadmap "$1" "$RM_DONE"; old_plan_with_status "$1" 済 "所有者が確かめた" 人が確認; put_spec_with "$1" "見本の目的。"; }
+setup_rm_done_human_date() { put_roadmap "$1" "$RM_DONE"; old_plan_with_status "$1" 済 "2030-01-15 所有者が確かめ、届いた" 人が確認; put_spec_with "$1" "見本の目的。"; }
+setup_rm_spec_carry_missing() { put_roadmap "$1" "$RM_F1"; put_spec_with "$1" "- 後回し: 毎日の自動実行。持ち越し: F-9"; }
+setup_rm_spec_carry_ok() { put_roadmap "$1" "$RM_F1"; put_spec_with "$1" "- 後回し: 一覧の文字。持ち越し: F-1"; }
+setup_rm_plan_carry_no_list() { write_plan "$1/$A/$NEW.md" "$VERIFY_NEW" "- 後回し: 毎日の自動実行。持ち越し: F-2"; }
+setup_rm_active_td_missing() { write_plan "$1/$A/$NEW.md" "$VERIFY_NEW" "- 後回し: 片付け。持ち越し: TD-5"; }
+setup_rm_completed_td_missing() { write_plan "$1/$C/$OLD.md" "$VERIFY_NEW" "- 後回し: 片付け。持ち越し: TD-5"; }
+setup_rm_active_td_ok() {
+  setup_rm_active_td_missing "$1"
+  printf '%s\n' "# 技術的負債の一覧" "" "| 識別子 | 見つけた日 | 場所 | 内容 | 見つけた作業 |" "|---|---|---|---|---|" \
+    "| TD-5 | 2030-01-15 | src/x.ext | 見本 | 見本 |" > "$1/docs/exec-plans/tech-debt-tracker.md"
+}
+run_case "機能の一覧: 正しい表" pass "" setup_rm_ok
+run_case "機能の一覧: 区画と表の見出しだけ（行が 0）" pass "" setup_rm_empty_region
+run_case "機能の一覧: 識別子の重複" fail "識別子 F-1 が重複しています" setup_rm_dup
+run_case "機能の一覧: 状態の値の誤り" fail "F-1 の状態「作業中」は、残り・済・取りやめのどれでもありません" setup_rm_bad_state
+run_case "機能の一覧: 達成の条件の形の誤り" fail "F-1 の達成の条件の形の誤り" setup_rm_bad_cond
+run_case "機能の一覧: 列の数の誤り" fail "列の数が 4 です" setup_rm_bad_cols
+run_case "機能の一覧: 済の行の基準が完了した計画の状態の表で済" pass "" setup_rm_done_ok
+run_case "機能の一覧: 済の行の基準 LATER-1 が製品の仕様に無い" fail "達成の条件の基準 LATER-1 が、製品の仕様の受け入れ基準にありません" setup_rm_done_spec_missing
+run_case "機能の一覧: 済なのに宣言した子項目 LATER-1 (2) の行が無い" fail "基準 LATER-1 の宣言した子項目の行が状態の表にありません: LATER-1 (2)" setup_rm_done_kid_missing
+run_case "機能の一覧: 済なのに子項目 LATER-1 (2) が未" fail "基準 LATER-1 の状態の表の行が済ではありません: LATER-1 (2)=未" setup_rm_done_kid_open
+run_case "機能の一覧: 宣言した子項目がすべて済" pass "" setup_rm_done_kids_ok
+run_case "機能の一覧: 済なのに子項目 LATER-1 (2) の状態の欄が空" fail "基準 LATER-1 の状態の表の行が済ではありません: LATER-1 (2)=（空）" setup_rm_done_kid_empty
+run_case "機能の一覧: 残りの行の基準 LATER-9 が製品の仕様に無い" fail "F-1 の達成の条件の基準 LATER-9 が、製品の仕様の受け入れ基準にありません" setup_rm_left_spec_missing
+run_case "機能の一覧: 済なのに計画の状態の表に不合格がある" fail "基準 LATER-1 の状態の表の行が済ではありません" setup_rm_done_failed
+run_case "機能の一覧: 済なのに根拠に完了した計画が無い" fail "根拠に、実在する完了した計画" setup_rm_done_no_plan
+run_case "機能の一覧: 済なのに人が確かめる基準に日付が無い" fail "確かめた日付がありません" setup_rm_done_human_nodate
+run_case "機能の一覧: 人が確かめる基準に日付がある済" pass "" setup_rm_done_human_date
+run_case "機能の一覧: 仕様だけにある持ち越し先 F-9 が表に無い" fail "持ち越し先 F-9 が、製品の前提の機能の一覧にありません" setup_rm_spec_carry_missing
+run_case "機能の一覧: 仕様の持ち越し先 F-1 が表にある" pass "" setup_rm_spec_carry_ok
+run_case "機能の一覧: 計画が F-2 に持ち越すのに機能の一覧が無い" fail "を照らし合わせる、製品の前提の機能の一覧" setup_rm_plan_carry_no_list
+run_case "機能の一覧: 進行中の計画の TD-5 が技術的負債の一覧に無い" fail "持ち越し先 TD-5 が、技術的負債の一覧" setup_rm_active_td_missing
+run_case "機能の一覧: 完了した計画の TD-5 は調べない" pass "" setup_rm_completed_td_missing
+run_case "機能の一覧: 進行中の計画の TD-5 が技術的負債の一覧にある" pass "" setup_rm_active_td_ok
+
+# (e) 減らす変更。分岐元（origin/main）に区画と F-1・F-2 の行をコミットしてから、作業ツリーで変える
+base_with_roadmap() {
+  put_roadmap "$1" "${2-$RM_F1
+$RM_F2}" "${3:-}"
+  tgit -C "$1" add -A
+  tgit -C "$1" commit -q -m "見本"
+  tgit -C "$1" update-ref refs/remotes/origin/main HEAD
+}
+setup_rm_base_unchanged() { base_with_roadmap "$1"; }
+setup_rm_base_row_removed() { base_with_roadmap "$1"; write_roadmap "$1" "$RM_F1"; }
+setup_rm_base_region_removed() { base_with_roadmap "$1"; write_roadmap "$1" "" old; }
+setup_rm_base_cancel_no_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "$RM_F1
+| F-2 | 毎日の自動実行 | 取りやめ | 基準: -; 環境: 日次の起動; 確かめること: 手で実行せずに届いた | やめた |"
+}
+setup_rm_base_rename_no_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 文字の大きさを選べる | 残り | 基準: LATER-1; 環境: 手元のブラウザ | 見本 |
+$RM_F2"
+}
+setup_rm_base_cond_with_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 一覧の文字を大きくする | 残り | 基準: LATER-1, LATER-2; 環境: 手元のブラウザ | 利用者の決定: 見本の会話の 2 回目 |
+$RM_F2"
+}
+# 利用者の決定の参照を分岐元のまま変えずに、名前・達成の条件を変えるか取りやめにする（分岐元の F-1 の根拠は「利用者の決定: 見本の会話」）
+setup_rm_base_rename_same_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 文字の大きさを選べる | 残り | 基準: LATER-1; 環境: 手元のブラウザ | 利用者の決定: 見本の会話 |
+$RM_F2"
+}
+setup_rm_base_cond_same_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 一覧の文字を大きくする | 残り | 基準: LATER-1, LATER-2; 環境: 手元のブラウザ | 利用者の決定: 見本の会話 |
+$RM_F2"
+}
+setup_rm_base_cancel_same_decision() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 一覧の文字を大きくする | 取りやめ | 基準: LATER-1; 環境: 手元のブラウザ | 利用者の決定: 見本の会話 |
+$RM_F2"
+}
+# 分岐元の決定の参照の項目の後ろに、「; 」で区切って証拠のパスを足しただけで、機能の名前を変える
+setup_rm_base_rename_evidence_only() {
+  base_with_roadmap "$1"
+  write_roadmap "$1" "| F-1 | 文字の大きさを選べる | 残り | 基準: LATER-1; 環境: 手元のブラウザ | 利用者の決定: 見本の会話; docs/exec-plans/completed/x.md |
+$RM_F2"
+}
+# 機能の一覧を導入していない（地図に製品の前提の行も、持ち越し: F- も無い）プロジェクトを 1 回コミットし、分岐元を求められなくする
+setup_rm_nolist_github_missing() {
+  tgit -C "$1" add -A
+  tgit -C "$1" commit -q -m "見本"
+  CASE_ENV=(GITHUB_BASE_REF=no-such-branch)
+}
+# 地図に製品の前提の行は無いが、計画が F-2 に持ち越している（導入した目印）プロジェクトで、分岐元を求められなくする
+setup_rm_carry_github_missing() {
+  write_plan "$1/$A/$NEW.md" "$VERIFY_NEW" "- 後回し: 毎日の自動実行。持ち越し: F-2"
+  tgit -C "$1" add -A
+  tgit -C "$1" commit -q -m "見本"
+  CASE_ENV=(GITHUB_BASE_REF=no-such-branch)
+}
+# 分岐元で製品の前提を別のパス（docs/product/SENSE.md）に置き、今の地図から行と文書を両方消す
+setup_rm_base_moved_removed() {
+  mkdir -p "$1/docs/product"
+  printf '| 製品の前提 | `docs/product/SENSE.md` |\n' >> "$1/AGENTS.md"
+  write_roadmap "$1" "$RM_F1"
+  mv "$1/docs/PRODUCT_SENSE.md" "$1/docs/product/SENSE.md"
+  tgit -C "$1" add -A
+  tgit -C "$1" commit -q -m "見本"
+  tgit -C "$1" update-ref refs/remotes/origin/main HEAD
+  grep -v '製品の前提' "$1/AGENTS.md" > "$1/AGENTS.md.new" && mv "$1/AGENTS.md.new" "$1/AGENTS.md"
+  rm -f "$1/docs/product/SENSE.md"
+}
+setup_rm_base_old_form() { base_with_roadmap "$1" "" old; write_roadmap "$1" "$RM_F1"; }
+setup_rm_base_github_missing() { base_with_roadmap "$1"; CASE_ENV=(GITHUB_BASE_REF=no-such-branch); }
+run_case "機能の一覧: 分岐元と同じ" pass "" setup_rm_base_unchanged
+run_case "機能の一覧: 分岐元の F-2 の行を消した" fail "分岐元にあった製品の前提の F-2 の行が、今の機能の一覧にありません" setup_rm_base_row_removed
+run_case "機能の一覧: 分岐元にあった区画を消した" fail "にあった機能の一覧の区画が" setup_rm_base_region_removed
+run_case "機能の一覧: 根拠に利用者の決定の無い取りやめ" fail "F-2 は、分岐元から取りやめにしたのに" setup_rm_base_cancel_no_decision
+run_case "機能の一覧: 根拠に利用者の決定の無い機能の名前の変更" fail "F-1 は、分岐元から機能の名前を変えたのに" setup_rm_base_rename_no_decision
+run_case "機能の一覧: 利用者の決定のある達成の条件の変更" pass "" setup_rm_base_cond_with_decision
+run_case "機能の一覧: 分岐元と同じ決定の参照のまま機能の名前を変えた" fail "F-1 は、分岐元から機能の名前を変えたのに、根拠にその変更を決めた" setup_rm_base_rename_same_decision
+run_case "機能の一覧: 分岐元と同じ決定の参照のまま達成の条件を変えた" fail "F-1 は、分岐元から達成の条件を変えたのに、根拠にその変更を決めた" setup_rm_base_cond_same_decision
+run_case "機能の一覧: 分岐元と同じ決定の参照のまま取りやめにした" fail "F-1 は、分岐元から取りやめにしたのに、根拠にその変更を決めた" setup_rm_base_cancel_same_decision
+run_case "機能の一覧: 決定の参照の後ろに証拠のパスを足しただけで機能の名前を変えた" fail "F-1 は、分岐元から機能の名前を変えたのに、根拠にその変更を決めた" setup_rm_base_rename_evidence_only
+run_case_without "機能の一覧: 機能の一覧を導入していないプロジェクトは、分岐元を求められなくても比べない" "製品の機能の一覧を比べる分岐元を読めません" setup_rm_nolist_github_missing
+run_case "機能の一覧: 持ち越し: F- のあるプロジェクトは、分岐元を求められないと失敗" fail "製品の機能の一覧を比べる分岐元を読めません" setup_rm_carry_github_missing
+run_case "機能の一覧: 別のパスの製品の前提を地図の行ごと消した" fail "にあった機能の一覧の区画が、今の地図に製品の前提の行がありません" setup_rm_base_moved_removed
+run_case "機能の一覧: 分岐元が旧い形の文書なら比べない" pass "" setup_rm_base_old_form
+run_case "機能の一覧: GITHUB_BASE_REF の分岐元を読めない" fail "製品の機能の一覧を比べる分岐元を読めません" setup_rm_base_github_missing
+
 # --- 追加の検査の口（checks.d/） ---
 
 put_extra() { # $1 = リポジトリ、$2 = ファイル名、$3 = 本文（# 検査の名前 の行の後ろ）、$4 = 名前の行（省略時は「例」）
@@ -1088,9 +1337,9 @@ d="$TMP_ROOT/print"
 make_base "$d"
 put_extra "$d" a.sh 'exit 0'
 names="$(bash "$d/scripts/harness/check-docs.sh" --print checks 2>&1 || true)"
-if [ "$(printf '%s\n' "$names" | wc -l | tr -d ' ')" -eq 14 ] && [ "$(printf '%s\n' "$names" | tail -n 1)" = "例" ] \
+if [ "$(printf '%s\n' "$names" | wc -l | tr -d ' ')" -eq 15 ] && [ "$(printf '%s\n' "$names" | tail -n 1)" = "例" ] \
   && [ "$(printf '%s\n' "$names" | head -n 1)" = "必須のファイル" ]; then
-  echo "ok: --print checks（13 個の名前と、追加の検査の名前）"
+  echo "ok: --print checks（14 個の名前と、追加の検査の名前）"
   passed=$((passed + 1))
 else
   echo "NG: --print checks の出力が違います" >&2

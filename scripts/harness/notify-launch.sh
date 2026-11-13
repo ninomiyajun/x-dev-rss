@@ -1,6 +1,6 @@
 #!/bin/bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/notify-launch.sh
-# harness-copy: version=rules-2026.11.10-1
+# harness-copy: version=rules-2026.11.12-1
 # harness-copy: sha256=aab4bb180208745aedc5ac97fa82dd02eb469c4d0f59cd4b22e70d7a58e85758
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 早期通知の起動の部品。フックの設定（.claude/settings.json と .codex/hooks.json）が、早期通知の本体（notify.sh）を動かす前に、

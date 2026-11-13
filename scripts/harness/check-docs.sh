@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/check-docs.sh
-# harness-copy: version=rules-2026.11.10-1
-# harness-copy: sha256=9aba183473287daae62a0771d660bc3c7d7bc72f0f62e3f56b646190dd11c4a4
+# harness-copy: version=rules-2026.11.12-1
+# harness-copy: sha256=ce604b3a53321792aded7879d6f09393353b447708f7b81be4fee3830b3e1b3f
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 文書の検査（ハーネスの検査の本体）。どのプロジェクトでも同じ中身の写しを scripts/harness/check-docs.sh に置く。
 # プロジェクトごとの値は、同じ置き場の設定のファイル harness.conf と、プロジェクトの文書から読む。プロジェクト専用の
@@ -11,7 +11,7 @@
 #   check-docs.sh                        自分の置き場（scripts/harness/）から根を決めて検査する
 #   check-docs.sh --root <絶対パス>       その git の作業ツリーの根を検査する（早期通知が、別の作業ツリーを検査する形）
 #   check-docs.sh --print arch-path-re    検査 7 が拾うパスの正規表現を 1 行で出す（定期の走査が使う）。検査はしない
-#   check-docs.sh --print checks          検査の短い名前を 1 行に 1 つ出す（下の 13 個と、追加の検査の口の名前）。検査はしない
+#   check-docs.sh --print checks          検査の短い名前を 1 行に 1 つ出す（下の 14 個と、追加の検査の口の名前）。検査はしない
 #   check-docs.sh --print conf <キー>     設定のキーの値を出す（1 回だけのキーは既定を補い、何行でも書けるキーは 1 行に 1 つ）
 # 設定、追加の検査（checks.d/）、必須のファイルの一覧は、どの呼び方でも起動元（このファイルの置き場）のものを使う。
 # 検査する作業ツリーは文書としてだけ読み、そこのファイルを実行も読み込みもしない（別のブランチが書き換えたスクリプトを、
@@ -98,7 +98,26 @@
 #      .md の区画の写し（begin の印の次の行が harness-copy の行の区画）について、冒頭の行の sha256 が、
 #      冒頭の行を除いた中身の sha256 と一致する（うっかりした編集を拾う。正本と同じであることの証明にはならない。
 #      正本と比べるのは project-harness-init の harness-copies.sh）
-# この 13 個の後に、追加の検査の口（起動元の scripts/harness/checks.d/ の *.sh のうち、名前が .test.sh で終わらないもの）を、
+#  14. 製品の機能の一覧（書式の正本は、製品の前提の区画 roadmap-spec。製品の前提は、地図の「製品の前提」の行のパス）。
+#      (a) 区画の後の「### 一覧」の表の形（見出しの行が「識別子・機能・状態・達成の条件・根拠」の 5 列、各行も 5 列）、識別子
+#          （F-<数字>）の重複、状態の値（残り・済・取りやめ）、達成の条件の形（基準: <並び>; 環境: <環境>[; 確かめること: <文>]）。
+#          区画の無い文書（旧い形）と、区画の後に「### 一覧」の無い文書は、行が 0 の一覧として扱う。状態によらず、達成の条件に
+#          明示した基準の識別子（- と <略号>-* を除く）が、製品の仕様の受け入れ基準にある
+#      (b) 済の行: 達成の条件の基準が製品の仕様の受け入れ基準にあり（<略号>-* は、その略号の基準のすべて）、根拠に実在する
+#          完了した計画（docs/exec-plans/completed/<名前>.md）があり、その状態の表で、基準の行（子項目を宣言した基準は、宣言した
+#          子の行のすべて）がすべてあって済（状態の欄が空の行も済ではない）。検証の節で確かめ方が人が確認の基準は、状態の表の根拠に日付（YYYY-MM-DD）がある
+#      (c) 進行中と完了した計画と、archived でない仕様の「持ち越し: F-<数字>」が、表にある（表が無ければ失敗）
+#      (d) 進行中の計画の「持ち越し: TD-<数字>」が、技術的負債の一覧（地図の行。無ければ docs/exec-plans/tech-debt-tracker.md）の
+#          表の行にある（完了した計画は調べない）
+#      (e) 分岐元（検査 12 と同じ求め方。GITHUB_BASE_REF があるのに求められなければ、機能の一覧を導入したプロジェクト〔今の
+#          地図に製品の前提の行があるか、計画か仕様に「持ち越し: F-<数字>」がある〕でだけ失敗、手元で求められなければ調べない）の
+#          地図に製品の前提の行があり、その文書に区画があるとき（比べるかは分岐元で決め、今の地図は問わない）: 今の地図に製品の
+#          前提の行が無いか、今の製品の前提（今の地図のパス）に区画が無い／分岐元の F-<数字> の行が無い／分岐元の行の機能の名前か
+#          達成の条件を変えたか、取りやめにしたのに、分岐元の根拠に無い「利用者の決定: <場所>」が根拠に足されていない（根拠の
+#          項目は「; 」か「；」で区切り、場所はその項目の終わりまで）。
+#          分岐元に区画の無い文書（旧い形）は調べない
+#      計画・仕様・製品の前提のどれも、``` で囲んだコードブロックの中の行は数えない
+# この 14 個の後に、追加の検査の口（起動元の scripts/harness/checks.d/ の *.sh のうち、名前が .test.sh で終わらないもの）を、
 # 名前の順に 1 つずつ実行する。決まりは checks.d/README.md（ファイルの 2 行目以降に「# 検査の名前: <短い名前>」をちょうど
 # 1 行。bash で呼び、作業ディレクトリは検査する根、標準入力は /dev/null。環境変数 HARNESS_ROOT と HARNESS_ENGINE_DIR を渡す。
 # 終了コード 0 は合格、1 は不合格で、出力の「check-docs: NG:」の行の数を件数に足す。ほかの終了コードは、実行できなかった
@@ -188,27 +207,62 @@ else
   ' "$CONF" > "$conf_tsv"
 fi
 
+# 設定の行（conf.tsv。「キー<TAB>値」）は 1 回だけ読んで変数に持ち、キーごとの値はシェルの中で引く（キーごとに awk を
+# 起動しないため）。値は、行の最初のタブより後ろのすべて（値の中のタブも含む）。
+# conf.tsv が NUL を含む（awk の実装によっては設定の値の NUL をそのまま書く）と、シェルの変数には NUL の手前までしか
+# 入らない。そのときは（read が NUL で止まって成功する）、キーごとに awk で引く従来の形を使う（同じ結果にするため）。
+CONF_TSV_TEXT=""
+CONF_TSV_NUL=0
+IFS= read -r -d '' CONF_TSV_TEXT < "$conf_tsv" && CONF_TSV_NUL=1 || true
+if [ "$CONF_TSV_NUL" = 1 ]; then
 conf_get() { # <キー> [既定]: 1 回だけ書けるキーの値（無ければ既定）
   local v
   # キーがあれば「=」に値を続けた 1 行を出す（値が空でも、キーの有無を 1 回の awk で分けるため）
   v="$(awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); print "=" $0; exit }' "$conf_tsv")"
   if [ -n "$v" ]; then printf '%s\n' "${v#=}"; else printf '%s\n' "${2:-}"; fi
 }
+conf_get_r() { REPLY="$(conf_get "$@")"; }
 conf_all() { # <キー>: 何行でも書けるキーの値を 1 行に 1 つ
   awk -F '\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); print }' "$conf_tsv"
 }
+else
+# <キー> [既定]: 1 回だけ書けるキーの値（無ければ既定）を REPLY に入れる。キーがあれば、値が空でもその値
+conf_get_r() {
+  local rest="$CONF_TSV_TEXT" line
+  while [ -n "$rest" ]; do
+    line="${rest%%"$NL"*}"
+    case "$rest" in *"$NL"*) rest="${rest#*"$NL"}" ;; *) rest="" ;; esac
+    if [ "${line%%"$TAB"*}" = "$1" ] && [ "$line" != "${line#*"$TAB"}" ]; then REPLY="${line#*"$TAB"}"; return 0; fi
+  done
+  REPLY="${2:-}"
+}
+conf_get() { # <キー> [既定]: 1 回だけ書けるキーの値（無ければ既定）
+  local REPLY
+  conf_get_r "$@"
+  printf '%s\n' "$REPLY"
+}
+conf_all() { # <キー>: 何行でも書けるキーの値を 1 行に 1 つ
+  local rest="$CONF_TSV_TEXT" line
+  while [ -n "$rest" ]; do
+    line="${rest%%"$NL"*}"
+    case "$rest" in *"$NL"*) rest="${rest#*"$NL"}" ;; *) rest="" ;; esac
+    if [ "${line%%"$TAB"*}" = "$1" ] && [ "$line" != "${line#*"$TAB"}" ]; then printf '%s\n' "${line#*"$TAB"}"; fi
+  done
+}
+fi
 conf_bad() { echo "$1" >> "$conf_errors"; }
 
 if [ ! -s "$conf_errors" ]; then
-  [ "$(conf_get format)" = 1 ] || conf_bad "format=1 の行がありません（設定の書式の版は 1 だけ）"
-  AGENTS_MAX_LINES="$(conf_get agents_max_lines 120)"
+  conf_get_r format
+  [ "$REPLY" = 1 ] || conf_bad "format=1 の行がありません（設定の書式の版は 1 だけ）"
+  conf_get_r agents_max_lines 120; AGENTS_MAX_LINES="$REPLY"
   [[ "$AGENTS_MAX_LINES" =~ ^[1-9][0-9]*$ ]] || conf_bad "agents_max_lines の値「${AGENTS_MAX_LINES}」が 1 以上の整数ではありません"
-  CLAUDE_MD_EXACT="$(conf_get claude_md_exact no)"
+  conf_get_r claude_md_exact no; CLAUDE_MD_EXACT="$REPLY"
   case "$CLAUDE_MD_EXACT" in yes|no) ;; *) conf_bad "claude_md_exact の値「${CLAUDE_MD_EXACT}」が yes か no ではありません" ;; esac
-  ARCH_PREFIXES="$(conf_get arch_path_prefixes 'src docs scripts .github templates')"
+  conf_get_r arch_path_prefixes 'src docs scripts .github templates'; ARCH_PREFIXES="$REPLY"
   [[ "$ARCH_PREFIXES" =~ ^[A-Za-z0-9._-]+( [A-Za-z0-9._-]+)*$ ]] \
     || conf_bad "arch_path_prefixes の値「${ARCH_PREFIXES}」が、空白 1 つで区切った名前（英数字と ._-）の並びではありません"
-  ARCH_EXTS="$(conf_get arch_root_file_exts 'md cjs mjs ts json yml')"
+  conf_get_r arch_root_file_exts 'md cjs mjs ts json yml'; ARCH_EXTS="$REPLY"
   [[ "$ARCH_EXTS" =~ ^[a-z0-9]+( [a-z0-9]+)*$ ]] \
     || conf_bad "arch_root_file_exts の値「${ARCH_EXTS}」が、空白 1 つで区切った拡張子（英小文字と数字）の並びではありません"
   while IFS= read -r v; do
@@ -217,8 +271,9 @@ if [ ! -s "$conf_errors" ]; then
   done <<EOF
 $(conf_all part)
 EOF
-  DEFAULT_BRANCH="$(conf_get default_branch main)"
+  conf_get_r default_branch main; DEFAULT_BRANCH="$REPLY"
   [[ "$DEFAULT_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] && [[ "$DEFAULT_BRANCH" != -* ]] || conf_bad "default_branch の値「${DEFAULT_BRANCH}」に使えない文字があります"
+  re_empty=0
   while IFS="$TAB" read -r k v; do
     case "$k" in
       required.*)
@@ -227,8 +282,22 @@ EOF
         esac ;;
     esac
   done < "$conf_tsv"
-  awk -F '\t' '$1 == "record_exempt_line_re" && $2 == "" { f = 1 } END { exit !f }' "$conf_tsv" \
-    && conf_bad "record_exempt_line_re の値が空です"
+  # record_exempt_line_re の値が空の行があるか（タブで区切った 2 つ目の欄が空。値がタブで始まる行も当たる）
+  conf_rest="$CONF_TSV_TEXT"
+  if [ "$CONF_TSV_NUL" = 1 ]; then
+    conf_rest=""
+    awk -F '\t' '$1 == "record_exempt_line_re" && $2 == "" { f = 1 } END { exit !f }' "$conf_tsv" && re_empty=1
+  fi
+  while [ -n "$conf_rest" ]; do
+    conf_line="${conf_rest%%"$NL"*}"
+    case "$conf_rest" in *"$NL"*) conf_rest="${conf_rest#*"$NL"}" ;; *) conf_rest="" ;; esac
+    case "$conf_line" in
+      "record_exempt_line_re$TAB"*)
+        conf_v="${conf_line#*"$TAB"}"
+        [ -z "${conf_v%%"$TAB"*}" ] && re_empty=1 ;;
+    esac
+  done
+  [ "$re_empty" = 1 ] && conf_bad "record_exempt_line_re の値が空です"
   while IFS= read -r re; do
     [ -n "$re" ] || continue
     perl -e 'my $r = eval { qr/$ARGV[0]/ }; exit 2 unless defined $r; exit 3 unless $ARGV[0] =~ /\(\?<name>/ && $ARGV[0] =~ /\(\?<ver>/; exit 0' "$re" \
@@ -241,12 +310,21 @@ fi
 : "${ARCH_EXTS:=md cjs mjs ts json yml}"
 
 # 検査 7 が拾うパスの正規表現（定期の走査も --print arch-path-re で同じものを使う）
+# 「.」を「\.」にする置き換えと、空白を「|」にする置き換えは、シェルの中で行う（名前ごとに sed、全体で tr を起動しない）。
+# 「.」の置き換えは、${変数//…/…} の置き換えの後ろ側の逆斜線の扱いが bash の版で違うので、「.」で切ってつなぐ。
 arch_path_re() {
-  local p alt="" exts
+  local p alt="" exts r q
   for p in $ARCH_PREFIXES; do
-    alt="${alt:+$alt|}$(printf '%s' "$p" | sed 's/\./\\./g')"
+    r="$p"; q=""
+    while :; do
+      case "$r" in
+        *.*) q="$q${r%%.*}\\."; r="${r#*.}" ;;
+        *) q="$q$r"; break ;;
+      esac
+    done
+    alt="${alt:+$alt|}$q"
   done
-  exts="$(printf '%s' "$ARCH_EXTS" | tr ' ' '|')"
+  exts="${ARCH_EXTS//" "/|}"
   printf '^(%s)/|^[A-Za-z0-9._-]+\\.(%s)$\n' "$alt" "$exts"
 }
 
@@ -265,6 +343,7 @@ CHECK_NAMES=(
   "古い計画"
   "検査の由来の記録"
   "写しの中身"
+  "製品の機能の一覧"
 )
 
 # 追加の検査の口のファイルを、名前の順に 1 行に 1 つ出す（*.test.sh を除く）
@@ -403,7 +482,41 @@ fi
 #    （日本語の名前を引用符付きの形にしないため）。依存の置き場などの除外は .gitignore に従う。
 md_list="$work_dir/md-list"
 g ls-files -z --cached --others --exclude-standard -- '*.md' > "$md_list"
+# リンクの抜き出しは、一覧のすべての Markdown について 1 回の perl でまとめて行う（ファイルごとに grep を起動しないため）。
+# 一覧の項目ごとに「状態 NUL 抜き出した行 NUL」を 1 組ずつ、一覧の順に書く。抜き出した行は
+# grep -oE '\]\([^)[:space:]]+\)' の出力（一致ごとに 1 行。末尾の改行は除く）と同じで、状態は一致があれば 0、無ければ 1。
+# 通常のファイルでない・読めない・NUL を含む（grep が中身を出さずに「Binary file」の行を出す）ものは状態 F にし、下の
+# ループが、その項目だけ従来どおり grep で読む（終了コードと、grep が標準エラー出力に出す文を同じにするため）。
+# perl が無ければ、すべての項目を grep で読む。
+# 利用者の環境変数で perl の入出力が変わらないよう、PERL5OPT・PERLIO を空にし、-C0（PERL_UNICODE より優先）で文字の
+# 変換を止め、標準入出力を :raw にする（パスとリンクをバイト列のまま扱い、grep と同じバイト列を出すため）。
+md_links="$work_dir/md-links"
+md_links_ok=0
+if command -v perl >/dev/null 2>&1 \
+  && PERL5OPT= PERLIO= perl -C0 -e '
+       binmode(STDIN, ":raw"); binmode(STDOUT, ":raw");
+       $/ = "\0";
+       while (defined(my $p = <STDIN>)) {
+         chomp $p;
+         my ($st, $out) = ("F", "");
+         if (!-l $p && -f _ && open(my $fh, "<:raw", $p)) {
+           local $/; my $c = <$fh>; close $fh;
+           if (defined $c && index($c, "\0") < 0) {
+             my @m = ($c =~ /\]\([^)[:space:]]+\)/g);
+             ($st, $out) = (@m ? "0" : "1", join("\n", @m));
+           }
+         }
+         print $st, "\0", $out, "\0";
+       }' < "$md_list" > "$md_links" 2>/dev/null; then
+  md_links_ok=1
+fi
+[ "$md_links_ok" = 1 ] && exec 3< "$md_links"
 while IFS= read -r -d '' md; do
+  md_st=F; md_out=""
+  if [ "$md_links_ok" = 1 ]; then
+    IFS= read -r -d '' -u 3 md_st || md_st=F
+    IFS= read -r -d '' -u 3 md_out || md_out=""
+  fi
   if [ -L "$md" ]; then
     fail "$md はシンボリックリンクです" "シンボリックリンクをやめ、実体のファイルを置く"
     continue
@@ -414,10 +527,14 @@ while IFS= read -r -d '' md; do
     fail "$md を検査できません（一覧にあるのにファイルとして読めません）" "$md の種類と読み取りの権限を確かめる"
     continue
   fi
-  set +e
-  links="$(grep -oE '\]\([^)[:space:]]+\)' -- "$md")"
-  rc=$?
-  set -e
+  if [ "$md_st" = F ]; then
+    set +e
+    links="$(grep -oE '\]\([^)[:space:]]+\)' -- "$md")"
+    rc=$?
+    set -e
+  else
+    links="$md_out"; rc="$md_st"
+  fi
   if [ "$rc" -gt 1 ]; then
     fail "$md を grep で読めません（終了コード ${rc}）" "$md の読み取りの権限と中身を確かめる"
     continue
@@ -444,6 +561,7 @@ while IFS= read -r -d '' md; do
 $links
 EOF
 done < "$md_list"
+[ "$md_links_ok" = 1 ] && exec 3<&-
 
 # 5. ADR の目録
 if [ -f docs/adr/README.md ]; then
@@ -457,7 +575,8 @@ fi
 
 # 6. AGENTS.md の行数
 if [ -f AGENTS.md ]; then
-  lines="$(wc -l < AGENTS.md | tr -d ' ')"
+  lines="$(wc -l < AGENTS.md)"
+  lines="${lines//" "/}"
   if [ "$lines" -gt "$AGENTS_MAX_LINES" ]; then
     fail "AGENTS.md が $lines 行で、上限 $AGENTS_MAX_LINES 行を超えています" \
       "詳細を docs/ の文書へ移し、AGENTS.md には決まりの要約と文書の地図の行だけを残す（上限は scripts/harness/harness.conf の agents_max_lines）"
@@ -480,6 +599,25 @@ fi
 # ``` で始まる行ごとに、コードブロックの中と外を切り替え、外の行だけを出す
 outside_code_blocks() {
   awk '/^```/{inside=!inside; next} !inside' "$1"
+}
+
+# ファイル $1 が CR を含むか（grep -q "$CR" と同じ終了コード）。検査 8〜11 は同じ計画・記録を何度も調べるので、grep の
+# 結果が「含む」（0）か「含まない」（1）のときはパスごとに覚えて、2 回目からは grep を起動しない。読めないなど grep が
+# 失敗したとき（2）と、パスが改行を含むときは覚えず、毎回 grep を起動する（grep が出す文と回数を変えないため）。
+CR_HAS="$NL"
+CR_NOT="$NL"
+has_cr() {
+  local rc
+  case "$1" in *"$NL"*) grep -q "$CR" "$1"; return ;; esac
+  case "$CR_HAS" in *"$NL$1$NL"*) return 0 ;; esac
+  case "$CR_NOT" in *"$NL$1$NL"*) return 1 ;; esac
+  rc=0
+  grep -q "$CR" "$1" || rc=$?
+  case "$rc" in
+    0) CR_HAS="$CR_HAS$1$NL" ;;
+    1) CR_NOT="$CR_NOT$1$NL" ;;
+  esac
+  return "$rc"
 }
 
 # 書式の文書（docs/PLANS.md、docs/product-specs/README.md）の「## 必須の節」から、必須の見出しを 1 行ずつ出す。
@@ -540,7 +678,7 @@ if [ -f docs/PLANS.md ]; then
           "$plan を、実体のファイルとして置く"
         continue
       fi
-      if grep -q "$CR" "$plan"; then
+      if has_cr "$plan"; then
         fail "計画 $plan に CR（\\r）が含まれています" "改行を LF にしてください（CR があると見出しの行が一致しないため）"
         continue
       fi
@@ -747,7 +885,7 @@ for rec in docs/exec-plans/active/*.acceptance.md docs/exec-plans/completed/*.ac
       "$rec を、実体のファイルとして置く"
     continue
   fi
-  if grep -q "$CR" "$rec"; then
+  if has_cr "$rec"; then
     fail "受け入れ確認の記録 $rec に CR（\\r）が含まれています" "改行を LF にしてください（CR があると行を読み取れないため）"
     continue
   fi
@@ -778,7 +916,7 @@ if [ -n "$format_start" ]; then
     case "$plan" in *.acceptance.md) continue ;; esac
     # 読めない計画と CR を含む計画は、検査 8 が失敗にしている
     { [ -f "$plan" ] && [ ! -L "$plan" ]; } || continue
-    grep -q "$CR" "$plan" && continue
+    has_cr "$plan" && continue
     plan_name="$(basename "$plan" .md)"
     is_new_format_plan "$plan" || continue
     verification="$(check_plan_verification "$plan")"
@@ -792,7 +930,7 @@ EOF
     criteria="$(printf '%s\n' "$verification" | sed -n 's/^ACC	//p' | sort -u)"
     rec="docs/exec-plans/completed/$plan_name.acceptance.md"
     # 記録があれば、受け入れ確認の基準の有無によらず書式を調べる
-    if [ -f "$rec" ] && [ ! -L "$rec" ] && ! grep -q "$CR" "$rec"; then
+    if [ -f "$rec" ] && [ ! -L "$rec" ] && ! has_cr "$rec"; then
       while IFS= read -r problem; do
         [ -z "$problem" ] && continue
         fail "受け入れ確認の記録 $rec: $problem" \
@@ -1090,7 +1228,7 @@ for plan in docs/exec-plans/active/*.md docs/exec-plans/completed/*.md; do
   case "$plan" in *.acceptance.md) continue ;; esac
   # 読めない計画と CR を含む計画は、検査 8 が失敗にしている
   { [ -f "$plan" ] && [ ! -L "$plan" ]; } || continue
-  grep -q "$CR" "$plan" && continue
+  has_cr "$plan" && continue
   is_new_format_plan "$plan" || continue
   # 仕様の名前は英小文字・数字・ハイフン（docs/product-specs/README.md の「置き場と名前」）なので、その文字だけを拾う。
   # 読点などでつないだ 2 つのパスが 1 つにつながらないようにするため
@@ -1202,6 +1340,41 @@ latest_plan_date() {
     | sort | tail -n 1
 }
 
+# latest_plan_date と、その日付から基準の日 $2 までの日数（days_between）を、1 回の awk で求めて「日付 日数」の 1 行で出す
+# （日付が無ければ何も出さない）。数える日付と最も新しい日付の選び方は latest_plan_date と同じ: ファイル名の先頭の日付と、
+# コードブロックの外の「## 進捗」の節の中の日付（前後に数字が続かない並び）のうち、暦にあり、基準の日の 1 日後以前のもので、
+# 文字の並びとして最も大きいもの（sort | tail -n 1 と同じ。YYYY-MM-DD の形なので日付の順と同じ）。
+# 計画の名前に改行を含むときは、名前の日付を行ごとに読む latest_plan_date と days_between を使う（同じ結果にするため）。
+latest_plan_date_days() {
+  local name fdate="" latest
+  name="${1##*/}"
+  [ "$name" = .md ] || name="${name%.md}"
+  case "$name" in
+    *"$NL"*)
+      latest="$(latest_plan_date "$1" "$2")"
+      [ -z "$latest" ] || printf '%s %s\n' "$latest" "$(days_between "$latest" "$2")"
+      return 0 ;;
+  esac
+  if [[ "$name" =~ $PLAN_DATE_PREFIX_RE ]]; then fdate="${BASH_REMATCH[1]}"; fi
+  awk -v base="$2" -v fdate="$fdate" "$DATE_AWK"'
+    function take(s) { if (valid_date(s) && day_number(s) <= limit && (best == "" || (s "") > (best ""))) best = s }
+    BEGIN { limit = day_number(base) + 1; best = ""; if (fdate != "") take(fdate) }
+    /^```/ { inside = !inside; next }
+    inside { next }
+    /^## / { on = ($0 == "## 進捗"); next }
+    on {
+      line = $0
+      while (match(line, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/)) {
+        before = ""
+        if (RSTART > 1) before = substr(line, RSTART - 1, 1)
+        after = substr(line, RSTART + 10, 1)
+        if (before !~ /[0-9]/ && after !~ /[0-9]/) take(substr(line, RSTART, 10))
+        line = substr(line, RSTART + 1)
+      }
+    }
+    END { if (best != "") print best " " (day_number(base) - day_number(best)) }' "$1"
+}
+
 # 日付 $1 から日付 $2 までの日数を出す（どちらも YYYY-MM-DD。$2 が後なら正の数）
 days_between() {
   awk -v a="$1" -v b="$2" "$DATE_AWK"'BEGIN { print day_number(b) - day_number(a) }'
@@ -1224,14 +1397,15 @@ elif [ -n "$STALE_PLAN_DAYS" ]; then
     case "$plan" in *.acceptance.md) continue ;; esac
     # 読めない計画と CR を含む計画は、検査 8 が失敗にしている
     { [ -f "$plan" ] && [ ! -L "$plan" ]; } || continue
-    grep -q "$CR" "$plan" && continue
-    latest="$(latest_plan_date "$plan" "$base_day")"
+    has_cr "$plan" && continue
+    latest_and_days="$(latest_plan_date_days "$plan" "$base_day")"
+    latest="${latest_and_days%% *}"
     if [ -z "$latest" ]; then
       fail "進行中の計画 $plan の古さを判定できません（ファイル名の先頭にも「## 進捗」の節にも、数えられる YYYY-MM-DD の形の日付がありません。暦に無い日付と、基準の日 $base_day の 1 日後より後の日付は数えない）" \
         "$plan の「## 進捗」の節に、「- YYYY-MM-DD: 終えた手順」の形で、作業を進めた日付の行を書く（docs/PLANS.md の「必須の節」の進捗の書き方）"
       continue
     fi
-    elapsed="$(days_between "$latest" "$base_day")"
+    elapsed="${latest_and_days#* }"
     if [ "$elapsed" -ge "$STALE_PLAN_DAYS" ]; then
       fail "進行中の計画 $plan が古くなっています（最も新しい日付 $latest から $elapsed 日。基準の日は ${base_day}。$STALE_PLAN_DAYS 日以上、日付の更新が無い進行中の計画は失敗にする）" \
         "作業を進めたなら、$plan の「## 進捗」の節に、進めた日付（YYYY-MM-DD）の行を足す。終えたなら、「## 結果と振り返り」を書いて docs/exec-plans/completed/ へ移す。やめたなら、やめた理由を「## 結果と振り返り」に書いて docs/exec-plans/completed/ へ移す（docs/PLANS.md の「置き場所と名前」）"
@@ -1441,6 +1615,383 @@ while IFS="$TAB" read -r what why; do
 done <<EOF
 $copy_problems
 EOF
+
+# 14. 製品の機能の一覧（書式の正本は、製品の前提の区画 roadmap-spec。読み方は冒頭の説明のとおり）
+# 文書（標準入力。コードブロックの外の行）の区画と、区画の後の「### 一覧」の表を読み、1 行ずつ次の形で出す:
+#   NOREGION                     区画が無い（旧い形の文書）
+#   ERR<TAB><問題の説明>          表の形の崩れ、識別子の重複、状態の値の誤り、達成の条件の形の誤り
+#   ROW<TAB><識別子><TAB><状態><TAB><機能><TAB><達成の条件><TAB><根拠><TAB><基準の並び（, 区切り。無ければ ->）
+# 同じ書式を、利用者単位の読み取りの道具（exec-plan の scripts/product-status.sh）も読む（2 か所で同じ例の文書を試験する）
+ROADMAP_AWK='
+  function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+  function v(s) { return (s == "") ? "-" : s }
+  function check_cond(c, st,   rest, p, crit, env, chk, n, a, i, it, pre) {
+    CRIT = ""
+    if (length(c) >= 2 && substr(c, 1, 1) == "`" && substr(c, length(c), 1) == "`") c = substr(c, 2, length(c) - 2)
+    if (index(c, "基準: ") != 1) return "「基準: 」で始まらない"
+    rest = substr(c, length("基準: ") + 1)
+    p = index(rest, "; 環境: ")
+    if (p == 0) return "「; 環境: 」が無い"
+    crit = trim(substr(rest, 1, p - 1)); rest = substr(rest, p + length("; 環境: "))
+    p = index(rest, "; 確かめること: ")
+    if (p > 0) { env = trim(substr(rest, 1, p - 1)); chk = trim(substr(rest, p + length("; 確かめること: "))) }
+    else { env = trim(rest); chk = "" }
+    if (env == "" || index(env, ";") > 0) return "環境が空か、「;」で区切った余分な項目がある"
+    if (p > 0 && chk == "") return "「確かめること」が空"
+    if (crit == "-") {
+      if (chk == "") return "基準が - なのに「確かめること」が無い"
+      if (st == "済") return "基準が - の行は済にできない（仕様の基準で確かめる）"
+      CRIT = "-"; return ""
+    }
+    n = split(crit, a, ",")
+    for (i = 1; i <= n; i++) {
+      it = trim(a[i])
+      if (it !~ /^[A-Z]+-([0-9]+|[*])$/) return "基準の「" it "」が <略号>-<数字> か <略号>-* でない"
+      pre = it; sub(/-.*$/, "", pre)
+      if (length(pre) < 2 || length(pre) > 6) return "基準の「" it "」の略号が英大文字 2〜6 字でない"
+      CRIT = CRIT (CRIT == "" ? "" : ",") it
+    }
+    if (CRIT == "") return "基準が空"
+    return ""
+  }
+  BEGIN { phase = 0 }
+  phase == 0 { if ($0 == "<!-- roadmap-spec:begin -->") phase = 1; next }
+  phase == 1 { if ($0 == "<!-- roadmap-spec:end -->") phase = 2; next }
+  phase == 2 { if ($0 ~ /^## /) phase = 5; else if ($0 == "### 一覧") phase = 3; next }
+  phase == 3 {
+    if ($0 ~ /^#+ /) { print "ERR\t「### 一覧」の下に表がありません"; phase = 5; next }
+    if ($0 !~ /^[ \t]*\|/) next
+    phase = 4; rows = 0
+  }
+  phase == 4 {
+    if ($0 !~ /^[ \t]*\|/) { phase = 5; next }
+    line = $0; sub(/^[ \t]*\|/, "", line); sub(/\|[ \t]*$/, "", line)
+    n = split(line, col, "|")
+    for (i = 1; i <= n; i++) col[i] = trim(col[i])
+    rows++
+    if (rows == 1) {
+      h = col[1]; for (i = 2; i <= n; i++) h = h "," col[i]
+      if (h != "識別子,機能,状態,達成の条件,根拠") { print "ERR\t表の見出しの行が「" h "」です（期待: 識別子,機能,状態,達成の条件,根拠）"; phase = 5 }
+      next
+    }
+    if (rows == 2 && col[1] ~ /^:?-+:?$/) next
+    if (n != 5) { print "ERR\t表の行（" col[1] "）の列の数が " n " です（5 列にする。セルに | を書かない）"; next }
+    id = col[1]; st = col[3]
+    if (id !~ /^F-[0-9]+$/) { print "ERR\t識別子「" id "」が F-<数字> の形ではありません"; next }
+    if (id in seen) { print "ERR\t識別子 " id " が重複しています"; next }
+    seen[id] = 1
+    if (st != "残り" && st != "済" && st != "取りやめ") { print "ERR\t" id " の状態「" st "」は、残り・済・取りやめのどれでもありません"; next }
+    if (col[2] == "") { print "ERR\t" id " の機能の名前が空です"; next }
+    m = check_cond(col[4], st)
+    if (m != "") { print "ERR\t" id " の達成の条件の形の誤り: " m; next }
+    print "ROW\t" id "\t" st "\t" col[2] "\t" col[4] "\t" v(col[5]) "\t" CRIT
+  }
+  END {
+    if (phase == 0) print "NOREGION"
+    else if (phase == 1) print "ERR\t区画 roadmap-spec の終わりの印がありません"
+    else if (phase == 3) print "ERR\t「### 一覧」の下に表がありません"
+  }
+'
+roadmap_read() { outside_code_blocks "$1" | awk "$ROADMAP_AWK"; }
+# 地図の表（標準入力）の行のうち、1 列目が $1 の awk の正規表現に合う最初の行の、2 列目のバッククォートの中身
+# （書き手のパイプを途中で切らないように、入力を最後まで読む）
+map_first_path_in() {
+  awk -F '|' -v re="$1" '!done && /^\|/ { k = $2; gsub(/^[ \t]+|[ \t]+$/, "", k); if (k ~ re && match($3, /`[^`]+`/)) { print substr($3, RSTART + 1, RLENGTH - 2); done = 1 } }'
+}
+# 計画 $1 の「## 進捗」の「### 状態の表」で、基準 $2 の行（項目が $2 か「$2 (」で始まる行）の「項目<US>状態<US>根拠」を 1 行ずつ出す
+# （US は \037。タブは read の IFS で続いた空欄が潰れるので、空でない区切りにして空の状態の欄を保つ）
+US=$'\037'
+status_rows_of() {
+  outside_code_blocks "$1" | awk -v id="$2" '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    /^## / { inprog = ($0 == "## 進捗"); intab = 0; next }
+    !inprog { next }
+    /^### / { intab = ($0 == "### 状態の表"); hdr = 0; ci = 0; cs = 0; cr = 0; next }
+    !intab { next }
+    /^\|/ {
+      n = split($0, c, "|")
+      if (!hdr) { for (i = 2; i < n; i++) { h = trim(c[i]); if (h == "項目") ci = i; else if (h == "状態") cs = i; else if (h == "根拠") cr = i }; hdr = 1; next }
+      if ($0 ~ /^\|[-:| ]+\|?[ \t]*$/) next
+      if (!ci || !cs) next
+      item = trim(c[ci])
+      if (item != id && index(item, id " (") != 1) next
+      print item "\037" trim(c[cs]) "\037" (cr ? trim(c[cr]) : "")
+    }'
+}
+# 計画 $1 の検証の節の「- 子項目: <識別子> = (1) (2) …」の宣言のうち、基準 $2 の子の項目（「$2 (1)」の形）を 1 行ずつ出す
+children_of() {
+  outside_code_blocks "$1" | awk -v id="$2" '
+    /^## / { insec = ($0 ~ /^## 検証/); next }
+    !insec || !/^- 子項目(:|：)/ { next }
+    {
+      v = $0; sub(/^- 子項目(:|：)[ \t]*/, "", v); eq = index(v, "="); if (!eq) next
+      pid = substr(v, 1, eq - 1); gsub(/^[ \t`]+|[ \t`]+$/, "", pid); if (pid != id) next
+      rest = substr(v, eq + 1)
+      while (match(rest, /\([^()]+\)/)) { print id " " substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH) }
+    }'
+}
+# 計画 $1 の検証の節で、基準 $2 の確かめ方が「人が確認」なら 0
+human_checked_in() {
+  outside_code_blocks "$1" | awk -v id="$2" '
+    /^## / { insec = ($0 ~ /^## 検証/); cur = ""; next }
+    !insec { next }
+    /^###[ \t]/ { cur = $2; next }
+    cur == id && /^- 確かめ方: 人が確認[ \t]*$/ { f = 1 }
+    END { exit !f }'
+}
+# 文書 $1 の「持ち越し: <接頭辞>-<数字>」（全角のコロン・バッククォートも可）の識別子を 1 行に 1 つ出す。コードブロックの中は数えない
+carry_ids_in() {
+  outside_code_blocks "$1" | { grep -oE "持ち越し(:|：)( |　)*\`?$2-[0-9]+" || true; } | { grep -oE "$2-[0-9]+" || true; } | sort -u
+}
+# 分岐元（検査 12 と同じ求め方）を一度だけ求める。BASE_MB に merge-base（求めないときは空）、BASE_OK に 0（GITHUB_BASE_REF が
+# あるのに求められない）か 1 を入れる
+BASE_RESOLVED=0
+resolve_merge_base() {
+  local r base_ref=""
+  [ "$BASE_RESOLVED" -eq 0 ] || return 0
+  BASE_RESOLVED=1; BASE_MB=""; BASE_OK=1
+  g rev-parse --verify -q HEAD > /dev/null || return 0
+  if [ -n "${GITHUB_BASE_REF:-}" ]; then
+    if g rev-parse --verify -q "refs/remotes/origin/$GITHUB_BASE_REF" > /dev/null; then
+      base_ref="origin/$GITHUB_BASE_REF"
+    else
+      BASE_OK=0; return 0
+    fi
+  else
+    for r in ${HARNESS_BASE_REF:+"$HARNESS_BASE_REF"} "origin/$DEFAULT_BRANCH" "$DEFAULT_BRANCH"; do
+      if g rev-parse --verify -q "$r^{commit}" > /dev/null; then base_ref="$r"; break; fi
+    done
+  fi
+  [ -n "$base_ref" ] || return 0
+  BASE_MB="$(g merge-base HEAD "$base_ref" 2>/dev/null)" || BASE_MB=""
+  if [ -z "$BASE_MB" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then BASE_OK=0; fi
+  return 0
+}
+
+ROADMAP_FIX="製品の前提の区画 roadmap-spec（機能の一覧）の書式に合わせて直す"
+roadmap_rows="$work_dir/roadmap.tsv"   # 識別子<TAB>状態<TAB>機能<TAB>達成の条件<TAB>根拠<TAB>基準の並び
+: > "$roadmap_rows"
+roadmap_doc=""
+roadmap_present=0
+if [ -n "$map" ]; then
+  roadmap_doc="$(printf '%s\n' "$map" | map_first_path_in '^製品の前提$')"
+fi
+if [ -n "$roadmap_doc" ] && [ -f "$roadmap_doc" ] && [ ! -L "$roadmap_doc" ] && ! grep -q "$CR" "$roadmap_doc"; then
+  while IFS="$TAB" read -r kind a b c d e f; do
+    case "$kind" in
+      NOREGION) ;;
+      ERR) fail "製品の前提 $roadmap_doc の機能の一覧: $a" "$ROADMAP_FIX" ;;
+      ROW) printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$a" "$b" "$c" "$d" "$e" "$f" >> "$roadmap_rows" ;;
+    esac
+    [ "$kind" = NOREGION ] || roadmap_present=1
+  done <<EOF
+$(roadmap_read "$roadmap_doc")
+EOF
+  if [ "$roadmap_present" -eq 0 ] && grep -qxF '<!-- roadmap-spec:end -->' "$roadmap_doc"; then roadmap_present=1; fi
+fi
+
+# (a') 明示した基準の識別子は、状態によらず製品の仕様に実在することを求める（「-」と <略号>-* は除く。仕様に無い識別子を
+# 達成の条件に書かせないため）
+while IFS="$TAB" read -r rid rst rname rcond rbasis rcrit; do
+  [ -n "$rid" ] && [ "$rcrit" != - ] || continue
+  while IFS= read -r it; do
+    case "$it" in ''|*-\*) continue ;; esac
+    if ! awk -F '\t' -v k="$it" '$1 == k { f = 1 } END { exit !f }' "$spec_ids"; then
+      fail "製品の前提の $rid の達成の条件の基準 $it が、製品の仕様の受け入れ基準にありません" \
+        "基準の識別子を、製品の仕様にある受け入れ基準の識別子に直す（仕様がまだ無ければ、基準を - にして確かめることを書く）"
+    fi
+  done <<EOF2
+$(printf '%s\n' "$rcrit" | tr ',' '\n')
+EOF2
+done < "$roadmap_rows"
+
+# (b) 済の条件
+while IFS="$TAB" read -r rid rst rname rcond rbasis rcrit; do
+  [ -n "$rid" ] && [ "$rst" = 済 ] || continue
+  rplans=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in *.acceptance.md) continue ;; esac
+    if [ -f "$p" ] && [ ! -L "$p" ]; then rplans="$rplans$p$NL"; fi
+  done <<EOF
+$(printf '%s\n' "$rbasis" | { grep -oE 'docs/exec-plans/completed/[A-Za-z0-9._-]+\.md' || true; } | sort -u)
+EOF
+  if [ -z "$rplans" ]; then
+    fail "製品の前提の $rid は済ですが、根拠に、実在する完了した計画（docs/exec-plans/completed/<名前>.md）がありません" \
+      "根拠に、達成の条件の基準をすべて済にした完了した計画のパスを書く。計画を閉じたこともマージも済の証拠にしない。まだ満たしていなければ残りに戻す"
+    continue
+  fi
+  crit_ids=""
+  # 基準の並びは「,」で区切る（<略号>-* をシェルのパターンとして展開させないため、for で分けない）
+  while IFS= read -r it; do
+    [ -n "$it" ] || continue
+    case "$it" in
+      *-\*)
+        ex="$(awk -F '\t' -v p="${it%\*}" 'index($1, p) == 1 { print $1 }' "$spec_ids" | sort -u)"
+        if [ -z "$ex" ]; then
+          fail "製品の前提の $rid の達成の条件 $it に当たる受け入れ基準が、製品の仕様にありません" \
+            "略号を目録の仕様の略号に合わせるか、基準の識別子を並べて書く"
+        fi
+        crit_ids="$crit_ids$ex$NL" ;;
+      *) crit_ids="$crit_ids$it$NL" ;;
+    esac
+  done <<EOF2
+$(printf '%s\n' "$rcrit" | tr ',' '\n')
+EOF2
+  while IFS= read -r cid; do
+    [ -n "$cid" ] || continue
+    found=0; bad=""; nodate=""; nokid=""
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      rows="$(status_rows_of "$p" "$cid")"
+      [ -n "$rows" ] || continue
+      found=1
+      human=0; human_checked_in "$p" "$cid" && human=1
+      # 子項目を宣言した基準は、宣言した子の行がすべて状態の表にあることを求める（欠けた子を済と数えないため）
+      while IFS= read -r kid; do
+        [ -n "$kid" ] || continue
+        printf '%s\n' "$rows" | awk -F '\037' -v k="$kid" '$1 == k { f = 1 } END { exit !f }' || nokid="$nokid ${kid}（${p}）"
+      done <<EOF3
+$(children_of "$p" "$cid")
+EOF3
+      # 状態が空の行も済ではない（空の欄を飛ばさない）
+      while IFS="$US" read -r it s b; do
+        [ -n "$it" ] || continue
+        [ "$s" = 済 ] || bad="$bad ${it}=${s:-（空）}（${p}）"
+        if [ "$human" -eq 1 ] && ! printf '%s\n' "$b" | grep -qE '(^|[^0-9])[0-9]{4}-[0-9]{2}-[0-9]{2}([^0-9]|$)'; then nodate="$p"; fi
+      done <<EOF2
+$rows
+EOF2
+    done <<EOF2
+$rplans
+EOF2
+    if [ "$found" -eq 0 ]; then
+      fail "製品の前提の $rid は済ですが、根拠の完了した計画の状態の表に、基準 $cid の行がありません" \
+        "基準 $cid を済にした完了した計画を根拠に書くか、まだ満たしていなければ $rid を残りに戻す"
+    elif [ -n "$nokid" ]; then
+      fail "製品の前提の $rid は済ですが、基準 $cid の宣言した子項目の行が状態の表にありません:${nokid}" \
+        "宣言した子項目の行をすべて状態の表に置き、すべて済にしてから済にする。まだなら $rid を残りに戻す"
+    elif [ -n "$bad" ]; then
+      fail "製品の前提の $rid は済ですが、基準 $cid の状態の表の行が済ではありません:${bad}" \
+        "不合格や未の基準がある間は済にしない。$rid を残りに戻し、理由を根拠に書く"
+    elif [ -n "$nodate" ]; then
+      fail "製品の前提の $rid は済ですが、人が確かめる基準 $cid の状態の表の根拠に、確かめた日付がありません（${nodate}）" \
+        "状態の表の根拠に、確かめる環境で人が確かめた日付（YYYY-MM-DD）と結果を書く"
+    fi
+  done <<EOF2
+$crit_ids
+EOF2
+done < "$roadmap_rows"
+
+# (c) 計画と仕様の「持ち越し: F-<数字>」が表にあるか
+carry_files=()
+for p in docs/exec-plans/active/*.md docs/exec-plans/completed/*.md "$SPEC_DIR"/*.md; do
+  [ -f "$p" ] && [ ! -L "$p" ] || continue
+  case "$p" in *.acceptance.md|"$SPEC_INDEX") continue ;; esac
+  case "$p" in
+    "$SPEC_DIR"/*) [ "$(awk -F '\t' -v p="$p" '$2 == p { print $3; exit }' "$catalog")" != archived ] || continue ;;
+  esac
+  carry_files[${#carry_files[@]}]="$p"
+done
+carry_f_seen=0   # 計画か仕様に「持ち越し: F-<数字>」が 1 つでもあれば 1（機能の一覧を導入したプロジェクトの目印。(e) で使う）
+for p in ${carry_files[@]+"${carry_files[@]}"}; do
+  while IFS= read -r fid; do
+    [ -n "$fid" ] || continue
+    carry_f_seen=1
+    if [ "$roadmap_present" -eq 0 ]; then
+      fail "$p の持ち越し先 $fid を照らし合わせる、製品の前提の機能の一覧（区画 roadmap-spec の後の「### 一覧」の表）がありません" \
+        "製品の前提を地図に載せ、機能の一覧の区画と表を置いて $fid の行を足す（利用者の決定の後）。機能の一覧を使わないなら、持ち越し先を TD-<数字>・計画のパス・issue にする"
+    elif ! awk -F '\t' -v k="$fid" '$1 == k { f = 1 } END { exit !f }' "$roadmap_rows"; then
+      fail "$p の持ち越し先 $fid が、製品の前提の機能の一覧にありません" \
+        "利用者の決定を得て、機能の一覧に $fid の行を足すか、持ち越し先を一覧にある識別子に直す"
+    fi
+  done <<EOF
+$(carry_ids_in "$p" F)
+EOF
+done
+
+# (d) 進行中の計画の「持ち越し: TD-<数字>」が技術的負債の一覧にあるか（完了した計画は調べない。負債を解消すると行が消えるため）
+td_doc=""
+[ -z "$map" ] || td_doc="$(printf '%s\n' "$map" | map_first_path_in '^技術的負債の一覧$')"
+[ -n "$td_doc" ] || td_doc="docs/exec-plans/tech-debt-tracker.md"
+for p in docs/exec-plans/active/*.md; do
+  [ -f "$p" ] && [ ! -L "$p" ] || continue
+  case "$p" in *.acceptance.md) continue ;; esac
+  while IFS= read -r tid; do
+    [ -n "$tid" ] || continue
+    if [ ! -f "$td_doc" ] || ! grep -qE "^\|[[:space:]]*$tid[[:space:]]*\|" "$td_doc"; then
+      fail "進行中の計画 $p の持ち越し先 $tid が、技術的負債の一覧 $td_doc にありません" \
+        "$td_doc に $tid の行を足すか、持ち越し先を一覧にある識別子に直す"
+    fi
+  done <<EOF
+$(carry_ids_in "$p" TD)
+EOF
+done
+
+# (e) 減らす変更（分岐元との比べ。分岐元の求め方は検査 12 と同じ）。比べるかは分岐元で決める: 分岐元の地図に製品の前提の行があり、
+# その文書に区画があれば比べる（今の地図から行や文書を消しても、比べから外れないようにするため）
+# 根拠の「利用者の決定: <場所>」の場所を 1 つずつ出す。根拠の項目は「; 」か「；」で区切る書式なので、場所はその項目の終わり
+# まで（後ろの項目に書き足した証拠のパスを、新しい決定と見なさないため）。前後の空白と句点を除く。全角の文字は [] の中に書かない
+decisions_of() {
+  printf '%s\n' "$1" | awk '{
+    n = split($0, it, /; |；/)
+    for (i = 1; i <= n; i++) {
+      if (!match(it[i], /利用者の決定(:|：)/)) continue
+      s = substr(it[i], RSTART + RLENGTH); gsub(/^( |　)+/, "", s); gsub(/( |　|;|。)+$/, "", s)
+      if (s != "") print s
+    }
+  }' | sort -u
+}
+resolve_merge_base
+if [ "$BASE_OK" -eq 0 ] && [ -z "$roadmap_doc" ] && [ "$carry_f_seen" -eq 0 ]; then
+  : # 機能の一覧を導入していない（地図に製品の前提の行が無く、計画と仕様に「持ち越し: F-<数字>」も無い）ので、分岐元を
+    # 求められなくても比べない（検査 12 と同じ水準の割り切り。既存のプロジェクトの浅い checkout の CI を止めないため）
+elif [ "$BASE_OK" -eq 0 ]; then
+  fail "製品の機能の一覧を比べる分岐元を読めません（origin/${GITHUB_BASE_REF:-} との merge-base を求められない）" \
+    "CI の checkout で履歴をすべて取得する（fetch-depth: 0）。分岐元のブランチが origin にあることを確かめる"
+elif [ -n "$BASE_MB" ]; then
+  # 分岐元に AGENTS.md が無いとき（敷く前のコミット）は、比べる文書が無いものとして扱う
+  base_doc="$({ g show "$BASE_MB:AGENTS.md" 2>/dev/null || true; } | awk '/^## 文書の地図/{on=1; next} /^## /{on=0} on' | map_first_path_in '^製品の前提$')"
+  if [ -n "$base_doc" ] && g show "$BASE_MB:$base_doc" > "$work_dir/roadmap-base.md" 2>/dev/null \
+    && grep -qxF '<!-- roadmap-spec:end -->' "$work_dir/roadmap-base.md"; then
+    # 識別子<TAB>状態<TAB>機能<TAB>達成の条件<TAB>根拠
+    roadmap_read "$work_dir/roadmap-base.md" | awk -F '\t' '$1 == "ROW" { print $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }' > "$work_dir/roadmap-base.tsv"
+    if [ "$roadmap_present" -eq 0 ]; then
+      if [ -z "$roadmap_doc" ]; then
+        where="今の地図に製品の前提の行がありません"
+      else
+        where="今の製品の前提 $roadmap_doc にありません"
+      fi
+      fail "分岐元（$(g rev-parse --short "$BASE_MB")）の製品の前提 $base_doc にあった機能の一覧の区画が、${where}" \
+        "地図の製品の前提の行と、区画 roadmap-spec と「### 一覧」の表を戻す（機能の一覧は消さない。地図の製品の前提のパスを変えたときは、新しいパスの文書に区画と表を移す）"
+    else
+      while IFS="$TAB" read -r bid bst bname bcond bbasis; do
+        [ -n "$bid" ] || continue
+        cur="$(awk -F '\t' -v k="$bid" '$1 == k { print; exit }' "$roadmap_rows")"
+        if [ -z "$cur" ]; then
+          fail "分岐元にあった製品の前提の $bid の行が、今の機能の一覧にありません" \
+            "機能の一覧の行は消さない。$bid の行を戻す（やめるときは、利用者の決定の後に状態を取りやめにし、根拠にその決定の「利用者の決定: <場所>」を足す）"
+          continue
+        fi
+        IFS="$TAB" read -r _ cst cname ccond cbasis _ <<EOF
+$cur
+EOF
+        why=""
+        [ "$cname" = "$bname" ] || why="機能の名前を変えた"
+        [ "$ccond" = "$bcond" ] || why="${why:+${why}、}達成の条件を変えた"
+        if [ "$cst" = 取りやめ ] && [ "$bst" != 取りやめ ]; then why="${why:+${why}、}取りやめにした"; fi
+        [ -n "$why" ] || continue
+        # 変更を決めた利用者の決定の参照が、分岐元の根拠に無い形で足されていることを求める（前の決定の参照の使い回しを通さない）
+        decisions_of "$bbasis" > "$work_dir/dec-base"
+        decisions_of "$cbasis" > "$work_dir/dec-cur"
+        if [ -z "$(comm -13 "$work_dir/dec-base" "$work_dir/dec-cur")" ]; then
+          fail "製品の前提の $bid は、分岐元から${why}のに、根拠にその変更を決めた利用者の決定の参照が足されていません" \
+            "利用者の決定の後だけ変える。根拠に、その変更を決めた「利用者の決定: <決めた場所>」を足すか、分岐元の値に戻す"
+        fi
+      done < "$work_dir/roadmap-base.tsv"
+    fi
+  fi
+fi
 
 # 追加の検査の口（起動元の scripts/harness/checks.d/。決まりは冒頭の説明と checks.d/README.md）
 while IFS= read -r f; do
