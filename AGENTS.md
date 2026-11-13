@@ -51,7 +51,7 @@ X の @AnthropicAI のポストを 1 日 1 回取得し、Slack の決まった 
 
 | 何を確かめるか | コマンド |
 |---|---|
-| 全部（CI と同じ順） | `npm run check` |
+| 言語の検査の全部（lint・型・試験を、言語の CI と同じ順で。文書の検査とハーネスの試験は含まない） | `npm run check` |
 | lint | `npm run lint` |
 | 型 | `npm run typecheck` |
 | 試験 | `npm run test` |
@@ -61,6 +61,8 @@ X の @AnthropicAI のポストを 1 日 1 回取得し、Slack の決まった 
 | 定期の走査の段の読み取りの試験 | `bash scripts/harness/stack-adapter.test.sh` |
 | 秘匿値（作業ツリーの、コミットする全ファイル） | `bash scripts/harness/check-secrets.sh` |
 | 秘匿値（push する範囲の各コミットの中身） | `bash scripts/harness/check-secrets.sh --commits` |
+
+ハーネスの CI（`.github/workflows/harness-docs.yml`）が流すのは、`check-docs.sh`・`check-docs.test.sh`・`notify.test.sh`・`drift-scan.test.sh` と、部品の試験のうち同じファイルに書いたものだけで、言語の検査は含まない。CI と同じ全部を手元で確かめるときは、言語の検査の全部に加えて、これらも流す。
 
 リンクの検査が見るのは、インラインのリンクと画像（角括弧の文字の直後に、丸括弧で囲んだ先を続ける形）で、先に空白も
 `)` も含まないものだけである。参照形式のリンク、山括弧で囲んだ先、タイトル付きの先、自動リンク、HTML の a 要素は検査しないので、

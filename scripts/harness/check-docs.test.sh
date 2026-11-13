@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/check-docs.test.sh
-# harness-copy: version=rules-2026.11.12-1
-# harness-copy: sha256=c8b0645946ca074b7a9d1a1c3c9ef03112ac78a631f66dc9a6b23de90fdc3ba7
+# harness-copy: version=rules-2026.11.13-1
+# harness-copy: sha256=962b590ef8e410cb01b72611737b9538ac814458218f169960dd43f6997de9d0
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # check-docs.sh の試験（検査 8〜14、設定のファイル、追加の検査の口）。ハーネスの検査の本体の写しで、どのプロジェクトでも
 # 同じ中身を置く。手元で使うコマンドは下の TEST_COMMAND（CI はこのスクリプトを bash で直接呼ぶ）。最後に、このファイルの
@@ -70,6 +70,76 @@ skipped=0
 
 SP="docs/product-specs"
 
+# 見本へ写す本物の文書（根からの相対のパス）。写した後に unlink_missing が、この一覧の文書のリンクを直す
+REAL_DOCS="docs/PLANS.md docs/product-specs/README.md docs/PRODUCT_SENSE.md"
+
+# 見本の根（$1）へ写した本物の文書（REAL_DOCS）の相対リンクのうち、リンク先が見本に無く本物にはあるものを、
+# リンクでない形（「](先)」を「]（先）」）に書き換える。本物の文書が、見本へ写していないファイルへリンクしているだけで、
+# 検査 4（相対リンク）が見本の中で失敗し、この試験が失敗するのを防ぐため（本物の文書のリンクは正しい）。
+# リンク先を取り出す形と、調べないリンク先（http・https・mailto・# で始まるもの）は、check-docs.sh の検査 4 と同じにする。
+# 本物にも無いリンク先は書き換えない（従来どおり検査 4 で失敗する）。写しの区画（<!-- 名前:begin --> から
+# <!-- 名前:end --> まで。検査 13 が中身の sha256 を照合する）の中は書き換えず、そのようなリンクがあれば、試験の全体で
+# 1 回だけ注記の 1 行を出す（その場合は検査 4 で失敗する）
+unlink_missing() {
+  local d="$1" rel md sdir links target path drop inside
+  for rel in $REAL_DOCS; do
+    md="$d/$rel"
+    { [ -f "$md" ] && [ -f "$ROOT/$rel" ]; } || continue
+    case "$rel" in
+      */*) sdir="${rel%/*}" ;;
+      *) sdir="." ;;
+    esac
+    links="$(grep -oE '\]\([^)[:space:]]+\)' -- "$md" || true)"
+    drop=""
+    while IFS= read -r target; do
+      target="${target#\](}"
+      target="${target%)}"
+      [ -z "$target" ] && continue
+      case "$target" in
+        http://*|https://*|mailto:*|\#*) continue ;;
+      esac
+      path="${target%%#*}"
+      [ -z "$path" ] && continue
+      if [ ! -e "$d/$sdir/$path" ] && [ -e "$ROOT/$sdir/$path" ]; then
+        drop="${drop}${target}
+"
+      fi
+    done <<EOF
+$links
+EOF
+    [ -n "$drop" ] || continue
+    inside="$TMP_ROOT/unlink-inside"
+    : > "$inside"
+    DROP_="$drop" awk -v inside="$inside" '
+      BEGIN { n = split(ENVIRON["DROP_"], t, "\n"); for (i = 1; i <= n; i++) if (t[i] != "") want["](" t[i] ")"] = 1 }
+      /^<!-- [^ ]+:begin -->$/ { region = 1 }
+      region {
+        for (k in want) if (index($0, k) > 0) print substr(k, 3, length(k) - 3) > inside
+        print
+        if ($0 ~ /^<!-- [^ ]+:end -->$/) region = 0
+        next
+      }
+      {
+        line = $0; out = ""
+        while ((p = index(line, "](")) > 0) {
+          rest = substr(line, p); q = index(rest, ")")
+          if (q > 0 && (substr(rest, 1, q) in want)) {
+            out = out substr(line, 1, p - 1) "]（" substr(rest, 3, q - 3) "）"; line = substr(rest, q + 1)
+          } else {
+            out = out substr(line, 1, p + 1); line = substr(line, p + 2)
+          }
+        }
+        print out line
+      }' "$md" > "$md.unlink-tmp"
+    cat "$md.unlink-tmp" > "$md"
+    rm -f "$md.unlink-tmp"
+    if [ -s "$inside" ] && [ ! -e "$TMP_ROOT/unlink-noted" ]; then
+      : > "$TMP_ROOT/unlink-noted"
+      echo "check-docs.test: 注記: 本物の $rel の写しの区画の中に、見本へ写していないファイルへのリンク（$(head -n 1 "$inside")）があります。区画の中は書き換えないので、見本の中の検査 4 で失敗します。ハーネスの正本（区画のひな形）へ知らせてください" >&2
+    fi
+  done
+}
+
 # 仕様の置き場を作り、本物の docs/product-specs/README.md の書式（目録の節より前）と、目録の表の見出しの 2 行を写す。
 # 目録の表の本文の行（実際に登録された仕様）は取り除き、空の目録にする。残すと、実際に仕様が登録されたとき、
 # 写した先にその仕様のファイルが無く、通るはずの試験が失敗するため。README.md がリンクする
@@ -80,6 +150,7 @@ add_spec_dir() {
   if [ -f "$ROOT/docs/PRODUCT_SENSE.md" ]; then
     cp "$ROOT/docs/PRODUCT_SENSE.md" "$1/docs/PRODUCT_SENSE.md"
   fi
+  unlink_missing "$1"
 }
 
 # 検査 1〜7 を通る最小のリポジトリを作る。必須のファイルは、決まった中身が要るものを除いて空のファイルにする。
@@ -113,6 +184,7 @@ EOF
   elif grep -qxF 'docs/PRODUCT_SENSE.md' <<<"$REQUIRED"; then
     : > "$d/docs/PRODUCT_SENSE.md"
   fi
+  unlink_missing "$d"
   git -C "$d" init -q
 }
 BASE_TEMPLATE="$TMP_ROOT/base-template"

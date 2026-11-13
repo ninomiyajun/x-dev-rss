@@ -1,6 +1,6 @@
 #!/bin/bash
 # harness-copy: source=home/agents/skills/project-harness-init/assets/harness/notify.sh
-# harness-copy: version=rules-2026.11.12-1
+# harness-copy: version=rules-2026.11.13-1
 # harness-copy: sha256=65de6439fc93e2eb5c57419be08a6a367267da0e75add50482f8a1b9e9a70640
 # harness-copy: この 4 行と本体は手で変えない。正本を直して project-harness-init の「導入済みのプロジェクトの更新」で置き換える
 # 早期通知。Claude Code の Edit・Write と、Codex の apply_patch がファイルを書いた直後に、フックから呼ばれる

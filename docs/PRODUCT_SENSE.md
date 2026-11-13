@@ -25,7 +25,7 @@ X のアカウントのポストを毎日 1 回取得し、Slack の決まった
 製品の仕様「X のポストを Slack へ通知する」（`docs/product-specs/x-post-to-slack.md`）で決めた。
 
 <!-- roadmap-spec:begin -->
-<!-- harness-copy: region=roadmap-spec source=home/agents/skills/project-harness-init/assets/product-sense.md version=rules-2026.11.12-1 sha256=03f974792bd2fa1c625ff33b419f2f9580a89bc38a51e9d211d72478304d0b04 -->
+<!-- harness-copy: region=roadmap-spec source=home/agents/skills/project-harness-init/assets/product-sense.md version=rules-2026.11.13-1 sha256=03f974792bd2fa1c625ff33b419f2f9580a89bc38a51e9d211d72478304d0b04 -->
 ## 機能の一覧
 
 製品の目的の一部で、利用者が「作る」か「後で作る」と決めた機能を、達成の条件と状態つきで持つ。思い付きの将来の案は載せない。
